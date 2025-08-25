@@ -1,0 +1,11 @@
+for the docs build
+
+julia --project=docs docs/make.jl
+
+
+] activate .
+] dev .
+using Pkg
+Pkg.add("Revise")
+using Revise
+using KeemenaSubwords
