@@ -1,0 +1,3 @@
+var documenterSearchIndex = {"docs":
+[{"location":"#KeemenaSubwords.jl","page":"Home","title":"KeemenaSubwords.jl","text":"","category":"section"},{"location":"","page":"Home","title":"Home","text":"Downstream of KeemenaPreprocessing.jl.","category":"page"},{"location":"","page":"Home","title":"Home","text":"This package provides subword tokenization utilities (e.g., BPE, WordPiece, SentencePiece, Unigram) intended to integrate with the Keemena* ecosystem.","category":"page"},{"location":"#Installation-(development)","page":"Home","title":"Installation (development)","text":"","category":"section"},{"location":"","page":"Home","title":"Home","text":"] add https://github.com/mantzaris/KeemenaSubwords.jl","category":"page"}]
+}
