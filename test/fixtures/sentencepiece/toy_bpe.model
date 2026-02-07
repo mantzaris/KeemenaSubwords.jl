@@ -1,0 +1,21 @@
+type=bpe
+whitespace_marker=▁
+unk_token=<unk>
+piece	<unk>	-99	unk
+piece	<s>	-50	bos
+piece	</s>	-50	eos
+piece	▁	-2
+piece	h	-2
+piece	e	-2
+piece	l	-2
+piece	o	-2
+piece	▁h	-1
+piece	▁he	-1
+piece	▁hel	-1
+piece	▁hell	-1
+piece	▁hello	-1
+merge	▁	h
+merge	▁h	e
+merge	▁he	l
+merge	▁hel	l
+merge	▁hell	o

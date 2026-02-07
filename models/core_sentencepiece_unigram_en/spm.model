@@ -1,0 +1,15 @@
+# keemena_sentencepiece_v1
+type=unigram
+whitespace_marker=▁
+unk_token=<unk>
+piece	<unk>	-99.0	unk
+piece	<s>	-50.0	bos
+piece	</s>	-50.0	eos
+piece	▁hello	-0.10
+piece	▁world	-0.20
+piece	▁keemena	-0.30
+piece	▁subwords	-0.35
+piece	▁sub	-0.60
+piece	words	-0.55
+piece	▁julia	-0.40
+piece	lang	-0.90

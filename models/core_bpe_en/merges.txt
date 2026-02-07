@@ -1,0 +1,21 @@
+# core_bpe_en merges
+h e
+he l
+hel l
+hell o
+hello </w>
+w o
+wo r
+wor l
+worl d
+world </w>
+k e
+e m
+e n
+en a
+ena </w>
+s u
+su b
+wor d
+word s
+words </w>

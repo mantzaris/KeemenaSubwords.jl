@@ -1,0 +1,5 @@
+<unk>	-99	unk
+<s>	-50	bos
+</s>	-50	eos
+hello	-0.1
+world	-0.2

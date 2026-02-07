@@ -1,0 +1,17 @@
+# Integration With KeemenaPreprocessing
+
+`KeemenaSubwords` tokenizers are callable and work with `KeemenaPreprocessing`'s callable tokenizer contract.
+
+```julia
+using KeemenaPreprocessing
+using KeemenaSubwords
+
+tokenizer = load_tokenizer(:core_bpe_en)
+
+cfg = PreprocessConfiguration(tokenizer_name = keemena_callable(tokenizer))
+bundle = preprocess_corpus(["hello world", "hello keemena"]; config=cfg)
+
+# KeemenaPreprocessing stores callable levels under Symbol(typeof(tokenizer))
+lvl = level_key(tokenizer)
+subword_corpus = get_corpus(bundle, lvl)
+```

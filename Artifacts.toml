@@ -1,0 +1,3 @@
+# Placeholder artifact manifest.
+# Core models are currently shipped in-repo under ./models for sections 1-3.
+# Future iterations can move these entries to content-addressed artifacts.

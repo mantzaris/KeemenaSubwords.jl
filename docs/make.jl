@@ -19,7 +19,10 @@ makedocs(
                   edit_link = "main"),
     checkdocs = :exports,              # complain only for *exported* names :contentReference[oaicite:0]{index=0}
     pages = [
-        "Home"          => "index.md"
+        "Home"          => "index.md",
+        "Integration"   => "integration.md",
+        "Loading"       => "loading.md",
+        "Built-In Models" => "models.md",
     ],
 )
 
