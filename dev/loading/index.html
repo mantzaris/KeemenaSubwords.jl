@@ -10,12 +10,14 @@ gpt2 = load_tokenizer(:openai_gpt2_bpe)
 mistral_v1 = load_tokenizer(:mistral_v1_sentencepiece)
 phi2 = load_tokenizer(:phi2_bpe)
 qwen = load_tokenizer(:qwen2_5_bpe)
+bert_multi = load_tokenizer(:bert_base_multilingual_cased_wordpiece)
 xlmr = load_tokenizer(:xlm_roberta_base_sentencepiece_bpe)
 
 # directory/file auto-detection
 load_tokenizer(&quot;/path/to/model_dir&quot;)
 load_tokenizer(&quot;/path/to/spm.model&quot;)
 load_tokenizer(&quot;/path/to/encoding.tiktoken&quot;)
+load_tokenizer(&quot;/path/to/tokenizer.json&quot;; format=:hf_tokenizer_json)
 
 # explicit BPE/ByteBPE paths
 load_tokenizer((&quot;/path/to/vocab.txt&quot;, &quot;/path/to/merges.txt&quot;))
@@ -34,11 +36,19 @@ load_tokenizer(&quot;/path/to/llama3_tokenizer.tiktoken&quot;; format=:tiktoken)
 load_tokenizer(&quot;/path/to/tekken_like.tiktoken&quot;; format=:tiktoken)           # Mistral Tekken-like file
 
 # optional key registration for external assets
-register_external_model!(
+register_local_model!(
     :my_llama_external,
     &quot;/path/to/tokenizer.model&quot;;
     format=:sentencepiece_model,
     family=:llama,
     description=&quot;User-supplied Llama tokenizer&quot;,
 )
-load_tokenizer(:my_llama_external)</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../integration/">« Integration</a><a class="docs-footer-nextpage" href="../models/">Built-In Models »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Monday 9 February 2026 04:32">Monday 9 February 2026</span>. Using Julia version 1.12.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+load_tokenizer(:my_llama_external)
+
+# optional authenticated Hugging Face download helper
+download_hf_files(
+    &quot;meta-llama/Llama-3.1-8B&quot;,
+    [&quot;tokenizer.model&quot;];
+    revision=&quot;main&quot;,
+    token=get(ENV, &quot;HF_TOKEN&quot;, nothing),
+)</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../integration/">« Integration</a><a class="docs-footer-nextpage" href="../models/">Built-In Models »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Monday 9 February 2026 18:01">Monday 9 February 2026</span>. Using Julia version 1.12.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
