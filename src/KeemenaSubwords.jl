@@ -10,6 +10,10 @@ include("wordpiece.jl")
 include("unigram.jl")
 include("sentencepiece.jl")
 include("tiktoken.jl")
+include("huggingface_json/hf_json_types.jl")
+include("huggingface_json/hf_json_parse.jl")
+include("huggingface_json/hf_json_pipeline.jl")
+include("huggingface_json/hf_json_loader.jl")
 include("training.jl")
 include("bpe_train.jl")
 include("unigram_train.jl")
@@ -24,14 +28,18 @@ export AbstractSubwordTokenizer,
        UnigramTokenizer,
        SentencePieceTokenizer,
        TiktokenTokenizer,
+       HuggingFaceJSONTokenizer,
        keemena_callable,
        level_key,
        available_models,
        describe_model,
        model_path,
        prefetch_models,
+       download_hf_files,
        register_external_model!,
+       register_local_model!,
        recommended_defaults_for_llms,
+       load_hf_tokenizer_json,
        load_tokenizer,
        tokenize,
        encode,

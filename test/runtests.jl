@@ -4,7 +4,7 @@ using KeemenaSubwords
 const FIXTURES_DIR = joinpath(@__DIR__, "fixtures")
 fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
 
-@testset "KeemenaSubwords sections 1-9" begin
+@testset "KeemenaSubwords sections 1-11" begin
     @testset "Model registry" begin
         names = available_models()
         @test :core_bpe_en in names
@@ -14,6 +14,7 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
         @test :tiktoken_cl100k_base in names
         @test :openai_gpt2_bpe in names
         @test :bert_base_uncased_wordpiece in names
+        @test :bert_base_multilingual_cased_wordpiece in names
         @test :t5_small_sentencepiece_unigram in names
         @test :mistral_v1_sentencepiece in names
         @test :mistral_v3_sentencepiece in names
@@ -42,6 +43,8 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
         @test :roberta_base_bpe in bpe_models
 
         @test available_models(family=:qwen) == [:qwen2_5_bpe]
+        @test :core_bpe_en in available_models(shipped=true)
+        @test :qwen2_5_bpe in available_models(format=:hf_tokenizer_json)
         @test :qwen2_5_bpe in recommended_defaults_for_llms()
     end
 
@@ -165,6 +168,28 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
         @test_throws ArgumentError load_tokenizer(fixture("internal", "tokenizer.json"); format=:auto)
     end
 
+    @testset "Section 11 Hugging Face tokenizer.json loader" begin
+        hf = load_tokenizer(fixture("hf_json_wordpiece"); format=:auto)
+        @test hf isa HuggingFaceJSONTokenizer
+        @test tokenize(hf, "Hello keemena subwords") == [
+            "hello", "ke", "##em", "##ena", "sub", "##word", "##s",
+        ]
+
+        ids = encode(hf, "Hello world"; add_special_tokens=true)
+        @test first(ids) == token_to_id(hf, "[CLS]")
+        @test last(ids) == token_to_id(hf, "[SEP]")
+        @test decode(hf, ids) == "hello world"
+
+        err = try
+            load_tokenizer(fixture("hf_json_unsupported"); format=:hf_tokenizer_json)
+            nothing
+        catch ex
+            ex
+        end
+        @test err isa ArgumentError
+        @test occursin("Unsupported pre_tokenizer type", sprint(showerror, err))
+    end
+
     @testset "Section 9 built-in public baseline keys" begin
         availability = prefetch_models([
             :tiktoken_o200k_base,
@@ -198,6 +223,17 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
         @test bert isa WordPieceTokenizer
         @test !isempty(tokenize(bert, "hello keemena"))
 
+        multi = prefetch_models([:bert_base_multilingual_cased_wordpiece])
+        @test haskey(multi, :bert_base_multilingual_cased_wordpiece)
+        if multi[:bert_base_multilingual_cased_wordpiece]
+            bert_multi = load_tokenizer(:bert_base_multilingual_cased_wordpiece)
+            @test bert_multi isa WordPieceTokenizer
+            @test !isempty(tokenize(bert_multi, "hello mundo"))
+        else
+            info = describe_model(:bert_base_multilingual_cased_wordpiece)
+            @test info.format == :wordpiece_vocab
+        end
+
         t5 = load_tokenizer(:t5_small_sentencepiece_unigram)
         @test t5 isa SentencePieceTokenizer
         @test !isempty(tokenize(t5, "hello world"))
@@ -227,7 +263,7 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
             @test decode(tok, ids) isa String
         end
 
-        for key in (:phi2_bpe, :qwen2_5_bpe, :roberta_base_bpe)
+        for key in (:phi2_bpe, :roberta_base_bpe)
             tok = load_tokenizer(key)
             @test tok isa ByteBPETokenizer
             pieces = tokenize(tok, "hello world")
@@ -236,6 +272,11 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
             @test !isempty(ids)
             @test decode(tok, ids) isa String
         end
+
+        qwen = load_tokenizer(:qwen2_5_bpe)
+        @test qwen isa HuggingFaceJSONTokenizer || qwen isa ByteBPETokenizer
+        @test !isempty(tokenize(qwen, "hello world"))
+        @test decode(qwen, encode(qwen, "hello world")) isa String
     end
 
     @testset "Section 10 external model registration" begin
@@ -253,6 +294,36 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
         tok = load_tokenizer(ext_key; prefetch=false)
         @test tok isa BPETokenizer
         @test !isempty(tokenize(tok, "hello world"))
+    end
+
+    @testset "Section 11 local registry and HF download helper" begin
+        local_key = :local_test_wordpiece
+        register_local_model!(
+            local_key,
+            fixture("wordpiece");
+            format=:wordpiece_vocab,
+            description="Local WordPiece fixture registration",
+            family=:local,
+        )
+
+        @test local_key in available_models(family=:local, shipped=false)
+        local_tok = load_tokenizer(local_key; prefetch=false)
+        @test local_tok isa WordPieceTokenizer
+        @test !isempty(tokenize(local_tok, "hello keemena"))
+
+        @test isempty(download_hf_files("org/repo", String[]; outdir=mktempdir()))
+
+        if get(ENV, "KEEMENA_RUN_NETWORK_TESTS", "0") == "1"
+            files = download_hf_files(
+                "bert-base-uncased",
+                ["vocab.txt"];
+                revision="main",
+                outdir=mktempdir(),
+                force=true,
+            )
+            @test length(files) == 1
+            @test isfile(files[1])
+        end
     end
 
     @testset "Section 4 integration helpers" begin

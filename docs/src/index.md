@@ -33,7 +33,9 @@ level_key(tokenizer)
 ```julia
 available_models()
 available_models(format=:bpe_gpt2)
+available_models(format=:hf_tokenizer_json)
 available_models(family=:mistral)
+available_models(shipped=true)
 describe_model(:core_bpe_en)
 describe_model(:core_wordpiece_en)
 describe_model(:core_sentencepiece_unigram_en)
@@ -52,6 +54,7 @@ Public baseline keys:
 - `:tiktoken_p50k_base`
 - `:openai_gpt2_bpe`
 - `:bert_base_uncased_wordpiece`
+- `:bert_base_multilingual_cased_wordpiece`
 - `:t5_small_sentencepiece_unigram`
 - `:mistral_v1_sentencepiece`
 - `:mistral_v3_sentencepiece`
@@ -72,6 +75,31 @@ prefetch_models([
 ```
 
 Only tiny `:core_*` assets ship in this repository. Most real model files are lazy artifacts resolved from `Artifacts.toml`. Gated assets are supported via external user-supplied paths.
+
+Use pure-Julia Hugging Face tokenizer loading when a model ships only `tokenizer.json`:
+
+```julia
+load_tokenizer("/path/to/tokenizer.json"; format=:hf_tokenizer_json)
+```
+
+For gated assets (for example LLaMA), use user-managed files and optional cache helpers:
+
+```julia
+register_local_model!(
+    :my_llama,
+    "/path/to/tokenizer.model";
+    format=:sentencepiece_model,
+    family=:llama,
+    description="Local LLaMA tokenizer",
+)
+
+download_hf_files(
+    "meta-llama/Llama-3.1-8B",
+    ["tokenizer.model"];
+    revision="main",
+    token=get(ENV, "HF_TOKEN", nothing),
+)
+```
 
 ## KeemenaPreprocessing Integration
 

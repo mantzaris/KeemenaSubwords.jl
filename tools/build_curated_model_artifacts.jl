@@ -71,6 +71,29 @@ const MODEL_SPECS = [
                 url = "https://huggingface.co/Qwen/Qwen2.5-7B/resolve/d149729398750b98c0af14eb82c78cfe92750796/merges.txt",
                 sha256 = "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3",
             ),
+            (
+                name = "tokenizer.json",
+                url = "https://huggingface.co/Qwen/Qwen2.5-7B/resolve/d149729398750b98c0af14eb82c78cfe92750796/tokenizer.json",
+                sha256 = "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
+            ),
+            (
+                name = "tokenizer_config.json",
+                url = "https://huggingface.co/Qwen/Qwen2.5-7B/resolve/d149729398750b98c0af14eb82c78cfe92750796/tokenizer_config.json",
+                sha256 = "c91efca15ceff6e9ee9424db58a6f59cd41294e550a86cbd07e3c1fb500b34f9",
+            ),
+        ],
+    ),
+    (
+        key = :bert_base_multilingual_cased_wordpiece,
+        artifact_name = "bert_base_multilingual_cased_wordpiece",
+        license = "Apache-2.0",
+        upstream_ref = "huggingface:google-bert/bert-base-multilingual-cased@3f076fdb1ab68d5b2880cb87a0886f315b8146f8",
+        files = [
+            (
+                name = "vocab.txt",
+                url = "https://huggingface.co/google-bert/bert-base-multilingual-cased/resolve/3f076fdb1ab68d5b2880cb87a0886f315b8146f8/vocab.txt",
+                sha256 = "fe0fda7c425b48c516fc8f160d594c8022a0808447475c1a7c6d6479763f310c",
+            ),
         ],
     ),
     (
@@ -112,9 +135,11 @@ function file_sha256(path::AbstractString)::String
     end
 end
 
-function verify_sha256(path::AbstractString, expected::String)::String
+function verify_sha256(path::AbstractString, expected::Union{Nothing,String})::String
     actual = lowercase(file_sha256(path))
-    lowercase(expected) == actual || throw(ArgumentError("SHA-256 mismatch for $(path): expected=$(expected), actual=$(actual)"))
+    if expected !== nothing
+        lowercase(expected) == actual || throw(ArgumentError("SHA-256 mismatch for $(path): expected=$(expected), actual=$(actual)"))
+    end
     return actual
 end
 

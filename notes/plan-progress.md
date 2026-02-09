@@ -500,3 +500,73 @@ Complete plan section `## 10)` by tightening LLM-oriented model coverage UX and 
   - Result: `141/141` tests passed.
 - Ran: `julia --project=docs docs/make.jl`
   - Result: docs build successful (local deploy skipped outside CI as expected).
+
+## 2026-02-09 - Iteration 11
+
+### Objective
+Complete plan section `## 11)` by closing the remaining no-Python tokenization gaps: pure Julia `tokenizer.json` loading, LLaMA convenience APIs without redistribution, and expanded built-in registry coverage.
+
+### Completed section-11 implementation
+- Added pure Julia Hugging Face tokenizer JSON loader stack under `src/huggingface_json/`:
+  - `hf_json_types.jl`
+  - `hf_json_parse.jl`
+  - `hf_json_pipeline.jl`
+  - `hf_json_loader.jl`
+- Added new public tokenizer type + loader:
+  - `HuggingFaceJSONTokenizer`
+  - `load_hf_tokenizer_json(path)`
+- Integrated into existing loader path (no parallel registry):
+  - `load_tokenizer(path; format=:hf_tokenizer_json)`
+  - directory autodetection now prefers `tokenizer.json` when present.
+- Implemented supported matrix with clear unsupported-component errors (including JSON path + workaround):
+  - model types: BPE, WordPiece, Unigram
+  - normalizers: Lowercase, NFKC, Sequence
+  - pre-tokenizers: ByteLevel, Whitespace/WhitespaceSplit, Metaspace, Split(regex), Sequence
+  - post-processors: TemplateProcessing, Sequence
+  - decoders: ByteLevel, WordPiece, Metaspace, Sequence
+- Preserved compatibility fallback for built-in HF entries:
+  - if a model is marked `:hf_tokenizer_json` but `tokenizer.json` is absent and GPT2 files exist, loading falls back to `vocab.json + merges.txt`.
+
+### Model registry / UX updates
+- Extended model registry metadata and APIs:
+  - `available_models(; format=nothing, family=nothing, shipped=nothing)`
+  - `describe_model(key)` now includes `expected_files` and `shipped`
+  - preserved existing `available_models`, `describe_model`, `model_path`, `prefetch_models`, `load_tokenizer(::Symbol)` flow.
+- Added local user-model registry persistence in cache:
+  - `register_local_model!(...)`
+  - persists to `local_models.toml` under cache root (`KEEMENA_SUBWORDS_CACHE_DIR` override supported).
+- Added opt-in HF download helper for user-managed/gated tokenizers:
+  - `download_hf_files(repo_id, filenames; revision, outdir, token, force)`
+- Added built-in key:
+  - `:bert_base_multilingual_cased_wordpiece` (artifact-backed intent, optional availability in tests).
+
+### Qwen section-11 alignment
+- Kept `:qwen2_5_bpe` in the main built-in registry.
+- Updated registry format to `:hf_tokenizer_json` with GPT2 fallback behavior.
+- Extended upstream metadata entries to include:
+  - `tokenizer.json`
+  - `tokenizer_config.json`
+  - `special_tokens_map.json`
+  in addition to `vocab.json` + `merges.txt`.
+
+### Test/docs updates
+- Added deterministic HF JSON fixtures and tests:
+  - `test/fixtures/hf_json_wordpiece/tokenizer.json`
+  - `test/fixtures/hf_json_unsupported/tokenizer.json`
+- Added section-11 test coverage:
+  - `tokenizer.json` load + tokenize/encode/decode smoke behavior
+  - TemplateProcessing special token insertion checks
+  - unsupported component error message check
+  - local registry flow via `register_local_model!` + symbol loading
+  - HF download helper smoke (`filenames=[]`) with optional network-gated test branch
+- Updated README and docs pages with:
+  - `tokenizer.json` loading examples
+  - `register_local_model!` and `download_hf_files(...)`
+  - `available_models(...; shipped=...)`
+  - multilingual WordPiece built-in mention.
+
+### Verification
+- Ran: `julia --project=. -e 'using Pkg; Pkg.resolve()'`
+  - Result: dependency graph updated for JSON parser support.
+- Ran: `julia --project=. -e 'using Pkg; Pkg.test()'`
+  - Result: `157/157` tests passed (`KeemenaSubwords sections 1-11`).

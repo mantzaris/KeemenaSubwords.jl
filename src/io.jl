@@ -26,6 +26,11 @@ function load_tokenizer(
         return _load_bpe_gpt2(resolved; kwargs...)
     elseif format === :tiktoken
         return load_tiktoken(resolved; kwargs...)
+    elseif format === :hf_tokenizer_json
+        if isdir(resolved) && !isfile(joinpath(resolved, "tokenizer.json")) && _has_gpt2_assets(resolved)
+            return _load_bpe_gpt2(resolved; kwargs...)
+        end
+        return load_hf_tokenizer_json(resolved; kwargs...)
     end
     selected_format = format === :auto ? _detect_format(resolved) : _canonical_load_format(format)
 
@@ -43,8 +48,8 @@ function load_tokenizer(
         return load_sentencepiece(resolved; kwargs...)
     elseif selected_format === :tiktoken
         return load_tiktoken(resolved; kwargs...)
-    elseif selected_format === :internal_json
-        throw(ArgumentError("tokenizer.json loading is not implemented yet for this package's internal format"))
+    elseif selected_format === :hf_tokenizer_json
+        return load_hf_tokenizer_json(resolved; kwargs...)
     end
 
     throw(ArgumentError("Unsupported tokenizer format: $selected_format"))
@@ -156,6 +161,8 @@ function _canonical_load_format(format::Symbol)::Symbol
         return :sentencepiece
     elseif format in (:tiktoken,)
         return :tiktoken
+    elseif format in (:hf_tokenizer_json,)
+        return :hf_tokenizer_json
     end
 
     throw(ArgumentError("Unsupported tokenizer format: $format"))
@@ -204,7 +211,9 @@ function _detect_format(path::String)::Symbol
         ])
         tiktoken_files = filter(p -> endswith(lowercase(p), ".tiktoken"), readdir(path; join=true))
 
-        if (has_vocab_json && has_merges) || (has_encoder_json && has_vocab_bpe)
+        if has_tokenizer_json
+            return :hf_tokenizer_json
+        elseif (has_vocab_json && has_merges) || (has_encoder_json && has_vocab_bpe)
             return :bpe_gpt2
         elseif has_vocab && has_merges
             return :bpe
@@ -216,8 +225,6 @@ function _detect_format(path::String)::Symbol
             return :sentencepiece
         elseif length(tiktoken_files) == 1
             return :tiktoken
-        elseif has_tokenizer_json
-            return :internal_json
         end
 
         throw(ArgumentError("Could not infer tokenizer format from directory: $path"))
@@ -235,7 +242,7 @@ function _detect_format(path::String)::Symbol
     elseif endswith(lower_path, ".tiktoken")
         return :tiktoken
     elseif lower_name == "tokenizer.json"
-        return :internal_json
+        return :hf_tokenizer_json
     elseif lower_name == "vocab.json"
         sibling_merges = joinpath(dirname(path), "merges.txt")
         isfile(sibling_merges) || throw(ArgumentError("Found vocab.json without sibling merges.txt: $path"))
@@ -256,6 +263,13 @@ function _detect_format(path::String)::Symbol
     end
 
     throw(ArgumentError("Could not infer tokenizer format from file: $path"))
+end
+
+function _has_gpt2_assets(path::AbstractString)::Bool
+    return (
+        (isfile(joinpath(path, "vocab.json")) && isfile(joinpath(path, "merges.txt"))) ||
+        (isfile(joinpath(path, "encoder.json")) && isfile(joinpath(path, "vocab.bpe")))
+    )
 end
 
 function _as_wordpiece(tokenizer::AbstractSubwordTokenizer)::WordPieceTokenizer

@@ -14,6 +14,7 @@ Implemented core scope from plan sections 1-3:
 - SentencePiece `.model` compatibility wrapper (lightweight text + protobuf unigram loading)
 
 Built-in model keys currently exposed by the registry:
+- `:bert_base_multilingual_cased_wordpiece`
 - `:bert_base_uncased_wordpiece`
 - `:core_bpe_en`
 - `:core_sentencepiece_unigram_en`
@@ -60,6 +61,7 @@ decode(tiktoken, encode(tiktoken, "hello world"))
 available_models()
 available_models(format=:bpe_gpt2)
 available_models(family=:mistral)
+available_models(shipped=true)
 describe_model(:core_bpe_en)
 describe_model(:tiktoken_cl100k_base)
 recommended_defaults_for_llms()
@@ -68,6 +70,7 @@ recommended_defaults_for_llms()
 load_tokenizer("/path/to/model_dir")
 load_tokenizer("/path/to/spm.model")
 load_tokenizer("/path/to/o200k_base.tiktoken")
+load_tokenizer("/path/to/tokenizer.json"; format=:hf_tokenizer_json)
 
 # explicit BPE paths
 load_tokenizer(("/path/to/vocab.txt", "/path/to/merges.txt"))
@@ -86,6 +89,7 @@ status = prefetch_models([
     :tiktoken_cl100k_base,
     :openai_gpt2_bpe,
     :bert_base_uncased_wordpiece,
+    :bert_base_multilingual_cased_wordpiece,
     :t5_small_sentencepiece_unigram,
     :mistral_v1_sentencepiece,
     :mistral_v3_sentencepiece,
@@ -107,7 +111,9 @@ External user-supplied tokenizers (supported, not shipped):
   - No built-in is shipped by default; use user-supplied tiktoken-compatible files.
   - `load_tokenizer("/path/to/tekken_like.tiktoken"; format=:tiktoken)`
 - Optional registry helper for local paths:
-  - `register_external_model!(:my_llama, "/path/to/tokenizer.model"; format=:sentencepiece_model, family=:llama)`
+  - `register_local_model!(:my_llama, "/path/to/tokenizer.model"; format=:sentencepiece_model, family=:llama)`
+- Optional authenticated Hugging Face file helper (for user-managed/gated assets):
+  - `download_hf_files("meta-llama/Llama-3.1-8B", ["tokenizer.model"]; revision="main", token=get(ENV, "HF_TOKEN", nothing))`
 
 Artifact build helper for maintainers:
 - `julia --project=. tools/build_public_model_artifact.jl`

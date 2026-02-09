@@ -12,12 +12,14 @@ gpt2 = load_tokenizer(:openai_gpt2_bpe)
 mistral_v1 = load_tokenizer(:mistral_v1_sentencepiece)
 phi2 = load_tokenizer(:phi2_bpe)
 qwen = load_tokenizer(:qwen2_5_bpe)
+bert_multi = load_tokenizer(:bert_base_multilingual_cased_wordpiece)
 xlmr = load_tokenizer(:xlm_roberta_base_sentencepiece_bpe)
 
 # directory/file auto-detection
 load_tokenizer("/path/to/model_dir")
 load_tokenizer("/path/to/spm.model")
 load_tokenizer("/path/to/encoding.tiktoken")
+load_tokenizer("/path/to/tokenizer.json"; format=:hf_tokenizer_json)
 
 # explicit BPE/ByteBPE paths
 load_tokenizer(("/path/to/vocab.txt", "/path/to/merges.txt"))
@@ -36,7 +38,7 @@ load_tokenizer("/path/to/llama3_tokenizer.tiktoken"; format=:tiktoken)      # Ll
 load_tokenizer("/path/to/tekken_like.tiktoken"; format=:tiktoken)           # Mistral Tekken-like file
 
 # optional key registration for external assets
-register_external_model!(
+register_local_model!(
     :my_llama_external,
     "/path/to/tokenizer.model";
     format=:sentencepiece_model,
@@ -44,4 +46,12 @@ register_external_model!(
     description="User-supplied Llama tokenizer",
 )
 load_tokenizer(:my_llama_external)
+
+# optional authenticated Hugging Face download helper
+download_hf_files(
+    "meta-llama/Llama-3.1-8B",
+    ["tokenizer.model"];
+    revision="main",
+    token=get(ENV, "HF_TOKEN", nothing),
+)
 ```

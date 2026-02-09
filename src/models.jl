@@ -1,8 +1,17 @@
 import Pkg.Artifacts
+using Downloads
+using TOML
 
 const _PACKAGE_ROOT = normpath(joinpath(@__DIR__, ".."))
 const _ARTIFACTS_TOML = joinpath(_PACKAGE_ROOT, "Artifacts.toml")
 const _ARTIFACT_ONLY_ROOT = joinpath(_PACKAGE_ROOT, "models", "_artifacts_only")
+const _DEFAULT_CACHE_ROOT = isempty(DEPOT_PATH) ?
+    joinpath(homedir(), ".julia", "keemena_subwords") :
+    joinpath(first(DEPOT_PATH), "keemena_subwords")
+const _CACHE_ROOT = normpath(get(ENV, "KEEMENA_SUBWORDS_CACHE_DIR", _DEFAULT_CACHE_ROOT))
+const _LOCAL_MODELS_TOML = joinpath(_CACHE_ROOT, "local_models.toml")
+const _LOCAL_MODELS_LOADED = Ref(false)
+const _PERSISTED_LOCAL_KEYS = Set{Symbol}()
 
 struct BuiltinModelEntry
     format::Symbol
@@ -151,13 +160,22 @@ const _MODEL_REGISTRY = Dict{Symbol,BuiltinModelEntry}(
         "huggingface:microsoft/phi-2@810d367871c1d460086d9f82db8696f2e0a0fcd0",
     ),
     :qwen2_5_bpe => _entry(
-        :bpe_gpt2,
+        :hf_tokenizer_json,
         "qwen2_5_bpe",
         "qwen2_5_bpe",
         joinpath(_ARTIFACT_ONLY_ROOT, "qwen2_5_bpe"),
-        "Qwen2.5-7B tokenizer files (vocab.json + merges.txt).",
+        "Qwen2.5 BPE tokenizer assets (tokenizer.json with vocab/merges fallback).",
         "Apache-2.0",
         "huggingface:Qwen/Qwen2.5-7B@d149729398750b98c0af14eb82c78cfe92750796",
+    ),
+    :bert_base_multilingual_cased_wordpiece => _entry(
+        :wordpiece_vocab,
+        "bert_base_multilingual_cased_wordpiece",
+        "bert_base_multilingual_cased_wordpiece/vocab.txt",
+        joinpath(_ARTIFACT_ONLY_ROOT, "bert_base_multilingual_cased_wordpiece", "vocab.txt"),
+        "Hugging Face bert-base-multilingual-cased WordPiece vocabulary.",
+        "Apache-2.0",
+        "huggingface:google-bert/bert-base-multilingual-cased@3f076fdb1ab68d5b2880cb87a0886f315b8146f8",
     ),
     :roberta_base_bpe => _entry(
         :bpe_gpt2,
@@ -274,6 +292,23 @@ const _MODEL_UPSTREAM_FILES = Dict{
             url = "https://huggingface.co/Qwen/Qwen2.5-7B/resolve/d149729398750b98c0af14eb82c78cfe92750796/merges.txt",
             sha256 = "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3",
         ),
+        (
+            relative_path = "qwen2_5_bpe/tokenizer.json",
+            url = "https://huggingface.co/Qwen/Qwen2.5-7B/resolve/d149729398750b98c0af14eb82c78cfe92750796/tokenizer.json",
+            sha256 = "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
+        ),
+        (
+            relative_path = "qwen2_5_bpe/tokenizer_config.json",
+            url = "https://huggingface.co/Qwen/Qwen2.5-7B/resolve/d149729398750b98c0af14eb82c78cfe92750796/tokenizer_config.json",
+            sha256 = "c91efca15ceff6e9ee9424db58a6f59cd41294e550a86cbd07e3c1fb500b34f9",
+        ),
+    ],
+    :bert_base_multilingual_cased_wordpiece => [
+        (
+            relative_path = "bert_base_multilingual_cased_wordpiece/vocab.txt",
+            url = "https://huggingface.co/google-bert/bert-base-multilingual-cased/resolve/3f076fdb1ab68d5b2880cb87a0886f315b8146f8/vocab.txt",
+            sha256 = "fe0fda7c425b48c516fc8f160d594c8022a0808447475c1a7c6d6479763f310c",
+        ),
     ],
     :roberta_base_bpe => [
         (
@@ -311,6 +346,7 @@ const _MODEL_FAMILY = Dict{Symbol,Symbol}(
     :mistral_v3_sentencepiece => :mistral,
     :phi2_bpe => :phi,
     :qwen2_5_bpe => :qwen,
+    :bert_base_multilingual_cased_wordpiece => :bert,
     :roberta_base_bpe => :roberta,
     :xlm_roberta_base_sentencepiece_bpe => :xlm_roberta,
 )
@@ -322,13 +358,18 @@ function available_models(
     ;
     format::Union{Nothing,Symbol}=nothing,
     family::Union{Nothing,Symbol}=nothing,
+    shipped::Union{Nothing,Bool}=nothing,
 )::Vector{Symbol}
+    _ensure_local_models_loaded()
     names = collect(keys(_MODEL_REGISTRY))
     if format !== nothing
         names = [name for name in names if _matches_format(_MODEL_REGISTRY[name].format, format)]
     end
     if family !== nothing
         names = [name for name in names if get(_MODEL_FAMILY, name, :unknown) == family]
+    end
+    if shipped !== nothing
+        names = [name for name in names if _is_shipped_entry(_MODEL_REGISTRY[name]) == shipped]
     end
     sort!(names)
     return names
@@ -365,6 +406,80 @@ function register_external_model!(
 end
 
 """
+Persist a local user model registration in cache and load it into the active registry.
+"""
+function register_local_model!(
+    key::Symbol,
+    path_or_dir::AbstractString;
+    format::Symbol,
+    description::AbstractString="User-supplied local tokenizer",
+    family::Symbol=:local,
+    license::AbstractString="external-user-supplied",
+    upstream_ref::AbstractString="user-supplied",
+)::Nothing
+    _ensure_local_models_loaded()
+    register_external_model!(
+        key,
+        path_or_dir;
+        format=format,
+        description=description,
+        family=family,
+        license=license,
+        upstream_ref=upstream_ref,
+    )
+
+    push!(_PERSISTED_LOCAL_KEYS, key)
+    _write_local_models_registry()
+    return nothing
+end
+
+"""
+Download selected files from a Hugging Face repository revision into cache.
+
+This helper is opt-in and useful for user-managed / gated tokenizers.
+"""
+function download_hf_files(
+    repo_id::AbstractString,
+    filenames::AbstractVector{<:AbstractString};
+    revision::AbstractString="main",
+    outdir::Union{Nothing,AbstractString}=nothing,
+    token::Union{Nothing,AbstractString}=nothing,
+    force::Bool=false,
+)::Vector{String}
+    _ensure_local_models_loaded()
+    target_dir = outdir === nothing ?
+        joinpath(_CACHE_ROOT, "hf", _sanitize_cache_segment(repo_id), _sanitize_cache_segment(String(revision))) :
+        String(outdir)
+    mkpath(target_dir)
+
+    headers = Pair{String,String}[]
+    token !== nothing && push!(headers, "Authorization" => "Bearer $(token)")
+
+    outputs = String[]
+    for file in filenames
+        relative = String(file)
+        url = "https://huggingface.co/$(repo_id)/resolve/$(revision)/$(relative)"
+        local_path = joinpath(target_dir, splitpath(relative)...)
+        mkpath(dirname(local_path))
+
+        if !force && isfile(local_path)
+            push!(outputs, local_path)
+            continue
+        end
+
+        try
+            Downloads.download(url, local_path; headers=headers)
+        catch err
+            throw(ArgumentError("Failed to download Hugging Face file $(repo_id)/$(relative)@$(revision): $(sprint(showerror, err))"))
+        end
+
+        push!(outputs, local_path)
+    end
+
+    return outputs
+end
+
+"""
 Recommended built-in keys for LLM-oriented default prefetching.
 """
 function recommended_defaults_for_llms()::Vector{Symbol}
@@ -389,6 +504,7 @@ function prefetch_models(
     keys::AbstractVector{Symbol}=available_models();
     force::Bool=false,
 )::Dict{Symbol,Bool}
+    _ensure_local_models_loaded()
     availability = Dict{Symbol,Bool}()
 
     for key in keys
@@ -411,6 +527,7 @@ end
 Describe a built-in model.
 """
 function describe_model(name::Symbol)::NamedTuple
+    _ensure_local_models_loaded()
     haskey(_MODEL_REGISTRY, name) || throw(ArgumentError("Unknown built-in model: $name"))
     entry = _MODEL_REGISTRY[name]
     resolved = _resolve_model_path(entry)
@@ -424,8 +541,10 @@ function describe_model(name::Symbol)::NamedTuple
         format = entry.format,
         path = resolved,
         files = files,
+        expected_files = _expected_model_files(entry),
         exists = exists,
         source = source,
+        shipped = _is_shipped_entry(entry),
         description = entry.description,
         family = get(_MODEL_FAMILY, name, :unknown),
         license = entry.license,
@@ -443,8 +562,10 @@ function _matches_format(model_format::Symbol, query_format::Symbol)::Bool
         return model_format in (:wordpiece, :wordpiece_vocab)
     elseif query_format == :sentencepiece
         return model_format in (:sentencepiece, :sentencepiece_model)
+    elseif query_format == :bpe_gpt2
+        return model_format in (:bpe_gpt2, :hf_tokenizer_json)
     elseif query_format == :bpe
-        return model_format in (:bpe, :bpe_gpt2, :bytebpe)
+        return model_format in (:bpe, :bpe_gpt2, :bytebpe, :hf_tokenizer_json)
     end
 
     return false
@@ -454,6 +575,7 @@ end
 Resolve built-in model name to on-disk path.
 """
 function model_path(name::Symbol; auto_prefetch::Bool=true)::String
+    _ensure_local_models_loaded()
     info = describe_model(name)
 
     if !info.exists && auto_prefetch
@@ -553,9 +675,133 @@ function _resolved_model_files(entry::BuiltinModelEntry, resolved::String)::Vect
             return String[matches...]
         end
         return String[resolved]
+    elseif entry.format == :hf_tokenizer_json
+        if isdir(resolved)
+            tokenizer_json = joinpath(resolved, "tokenizer.json")
+            if isfile(tokenizer_json)
+                return String[tokenizer_json]
+            end
+
+            vocab_json = joinpath(resolved, "vocab.json")
+            merges_txt = joinpath(resolved, "merges.txt")
+            if isfile(vocab_json) && isfile(merges_txt)
+                return String[vocab_json, merges_txt]
+            end
+
+            encoder_json = joinpath(resolved, "encoder.json")
+            vocab_bpe = joinpath(resolved, "vocab.bpe")
+            if isfile(encoder_json) && isfile(vocab_bpe)
+                return String[encoder_json, vocab_bpe]
+            end
+
+            return String[tokenizer_json]
+        end
+        return String[resolved]
     end
 
     return String[resolved]
+end
+
+function _expected_model_files(entry::BuiltinModelEntry)::Vector{String}
+    if entry.format in (:bpe, :bytebpe)
+        return String["vocab.txt", "merges.txt"]
+    elseif entry.format == :bpe_gpt2
+        return String["vocab.json + merges.txt", "encoder.json + vocab.bpe"]
+    elseif entry.format in (:wordpiece, :wordpiece_vocab)
+        return String["vocab.txt"]
+    elseif entry.format in (:sentencepiece, :sentencepiece_model)
+        return String["spm.model / tokenizer.model / tokenizer.model.v3 / sentencepiece.bpe.model"]
+    elseif entry.format == :tiktoken
+        return String["*.tiktoken"]
+    elseif entry.format == :hf_tokenizer_json
+        return String["tokenizer.json (preferred)", "vocab.json + merges.txt (fallback)"]
+    end
+    return String["<unknown>"]
+end
+
+function _is_shipped_entry(entry::BuiltinModelEntry)::Bool
+    return entry.artifact_name !== nothing || startswith(entry.upstream_ref, "in-repo:")
+end
+
+function _ensure_local_models_loaded()::Nothing
+    _LOCAL_MODELS_LOADED[] && return nothing
+    _LOCAL_MODELS_LOADED[] = true
+
+    isfile(_LOCAL_MODELS_TOML) || return nothing
+    parsed = try
+        TOML.parsefile(_LOCAL_MODELS_TOML)
+    catch
+        return nothing
+    end
+
+    models = get(parsed, "models", Dict{String,Any}())
+    models isa AbstractDict || return nothing
+
+    for (key_raw, entry_any) in models
+        key = Symbol(String(key_raw))
+        entry_any isa AbstractDict || continue
+
+        path = get(entry_any, "path", nothing)
+        format_raw = get(entry_any, "format", nothing)
+        path isa AbstractString || continue
+        format_raw isa AbstractString || continue
+
+        description = String(get(entry_any, "description", "User-supplied local tokenizer"))
+        family = Symbol(String(get(entry_any, "family", "local")))
+        license = String(get(entry_any, "license", "external-user-supplied"))
+        upstream_ref = String(get(entry_any, "upstream_ref", "user-supplied"))
+
+        register_external_model!(
+            key,
+            String(path);
+            format=Symbol(format_raw),
+            description=description,
+            family=family,
+            license=license,
+            upstream_ref=upstream_ref,
+        )
+
+        push!(_PERSISTED_LOCAL_KEYS, key)
+    end
+
+    return nothing
+end
+
+function _write_local_models_registry()::Nothing
+    mkpath(dirname(_LOCAL_MODELS_TOML))
+    models = Dict{String,Any}()
+
+    for key in sort!(collect(_PERSISTED_LOCAL_KEYS))
+        haskey(_MODEL_REGISTRY, key) || continue
+        entry = _MODEL_REGISTRY[key]
+        models[String(key)] = Dict(
+            "path" => entry.fallback_path,
+            "format" => String(entry.format),
+            "description" => entry.description,
+            "family" => String(get(_MODEL_FAMILY, key, :local)),
+            "license" => entry.license,
+            "upstream_ref" => entry.upstream_ref,
+        )
+    end
+
+    open(_LOCAL_MODELS_TOML, "w") do io
+        TOML.print(io, Dict("models" => models))
+    end
+    return nothing
+end
+
+function _sanitize_cache_segment(value::AbstractString)::String
+    raw = String(value)
+    out = IOBuffer()
+    for c in raw
+        if isletter(c) || isnumeric(c) || c in ('-', '_', '.')
+            print(out, c)
+        else
+            print(out, '_')
+        end
+    end
+    result = String(take!(out))
+    return isempty(result) ? "_" : result
 end
 
 function _ensure_artifact_installed(artifact_name::String; force::Bool=false)::Bool
