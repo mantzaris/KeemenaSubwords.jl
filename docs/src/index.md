@@ -47,21 +47,8 @@ describe_model(:qwen2_5_bpe)
 recommended_defaults_for_llms()
 ```
 
-Public baseline keys:
-- `:tiktoken_o200k_base`
-- `:tiktoken_cl100k_base`
-- `:tiktoken_r50k_base`
-- `:tiktoken_p50k_base`
-- `:openai_gpt2_bpe`
-- `:bert_base_uncased_wordpiece`
-- `:bert_base_multilingual_cased_wordpiece`
-- `:t5_small_sentencepiece_unigram`
-- `:mistral_v1_sentencepiece`
-- `:mistral_v3_sentencepiece`
-- `:phi2_bpe`
-- `:qwen2_5_bpe`
-- `:roberta_base_bpe`
-- `:xlm_roberta_base_sentencepiece_bpe`
+For the generated full inventory table, see the **Built-In Models** page.
+Use `available_models(distribution=:artifact_public)` for public artifact-backed built-ins and `available_models(distribution=:installable_gated)` for gated installable keys.
 
 Prefetch artifacts (when available) for offline use:
 
@@ -99,6 +86,9 @@ download_hf_files(
     revision="main",
     token=get(ENV, "HF_TOKEN", nothing),
 )
+
+install_model!(:llama3_8b_tokenizer; token=ENV["HF_TOKEN"])
+load_tokenizer(:llama3_8b_tokenizer)
 ```
 
 ## KeemenaPreprocessing Integration

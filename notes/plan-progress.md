@@ -570,3 +570,200 @@ Complete plan section `## 11)` by closing the remaining no-Python tokenization g
   - Result: dependency graph updated for JSON parser support.
 - Ran: `julia --project=. -e 'using Pkg; Pkg.test()'`
   - Result: `157/157` tests passed (`KeemenaSubwords sections 1-11`).
+
+
+## 12) Eliminate README/docs drift, finish WordPiece artifact coverage, and add LLaMA "one command install" convenience (without redistributing gated files)
+
+### 12.1 Objective
+Make the package feel finished and trustworthy by:
+- Ensuring README and Documenter docs are generated from the same source of truth (no drift).
+- Ensuring WordPiece coverage is fully real (artifact is actually downloadable and prefetchable), not just present in docs.
+- Providing LLaMA-family convenience that feels like built-ins (automatic download + key-based loading) while respecting gated licensing and not redistributing files.
+
+### 12.2 What "done" looks like
+- The README built-in key list exactly matches `available_models()` output and includes WordPiece multilingual key.
+- Docs examples use the correct function name(s) for local registry (`register_local_model!` if that is the canonical API).
+- WordPiece built-ins:
+  - `:bert_base_uncased_wordpiece`
+  - `:bert_base_multilingual_cased_wordpiece`
+  are both artifact-backed and `prefetch_models([...])` succeeds.
+- LLaMA convenience:
+  - Users can run one command like `install_model!(:llama3_8b_instruct; token=ENV["HF_TOKEN"])`
+  - After install: `load_tokenizer(:llama3_8b_instruct)` works without specifying file paths.
+  - The package does not ship LLaMA files in Artifacts.toml and does not redistribute them.
+
+### 12.3 Tasks
+
+#### A) Single source of truth for model inventory (stop drift)
+1) Create one canonical registry table in code (if not already):
+- Keep all model keys and metadata in one place (example file: `src/model_registry.jl`).
+- Include fields used everywhere:
+  - `key`, `format`, `family`, `license`, `description`
+  - `expected_files`
+  - `distribution` (one of: `:shipped`, `:artifact_public`, `:installable_gated`, `:user_local`)
+  - `upstream_repo`, `upstream_ref`, `upstream_files`
+
+2) Auto-generate README models section
+- Add markers to README.md:
+  - `<!-- KEEMENA_MODELS_START -->`
+  - `<!-- KEEMENA_MODELS_END -->`
+- Add `tools/sync_readme_models.jl` that:
+  - loads KeemenaSubwords
+  - queries registry and renders a markdown table grouped by format/family
+  - replaces the marked section
+- Add a CI check (or pre-commit script) that fails if the README is out of date.
+
+3) Auto-generate docs "Built-In Models" content
+- Either:
+  - render the same table in Documenter by calling a function that returns markdown, or
+  - include a generated markdown file produced by a doc build step.
+Goal: docs and README are always consistent.
+
+#### B) Fix naming drift in external/local registry API
+1) Decide canonical API name:
+- If `register_local_model!` is the intended public API, keep it and:
+  - add `register_external_model!` as a deprecated alias (with a deprecation warning)
+  - update docs examples to use `register_local_model!`
+- If `register_external_model!` is the intended name, then:
+  - update notes/docs to stop mentioning `register_local_model!`
+  - ensure it persists to cache if that is implemented
+
+2) Update docs and README examples to use the canonical name.
+
+#### C) Ensure WordPiece artifact coverage is actually complete
+1) Make `:bert_base_multilingual_cased_wordpiece` a first-class built-in everywhere:
+- Add it to the README built-in list (via the auto-generation above).
+- Ensure `describe_model(:bert_base_multilingual_cased_wordpiece)` works and prints correct provenance.
+
+2) Ensure artifact binding exists and is stable
+- Confirm `Artifacts.toml` includes the multilingual vocab artifact with:
+  - pinned upstream revision (avoid floating "main" if possible)
+  - sha256 verification
+- Ensure `prefetch_models([:bert_base_multilingual_cased_wordpiece])` succeeds.
+
+3) Optional: add one more WordPiece for completeness (only if you want)
+- `:bert_base_cased_wordpiece` (English cased) as a small, cheap addition.
+- Do not add more WordPiece beyond this; it becomes redundant noise.
+
+4) Tests
+- Add a test that prefetches multilingual WordPiece when network is allowed (ENV gated),
+  and always tests that the registry entry exists and expected_files are correct.
+
+#### D) LLaMA convenience without redistributing gated assets
+Important constraint:
+- Do not include Meta LLaMA tokenizer files as public package artifacts, and do not host them yourself.
+- Provide an install workflow that uses the user's credentials or signed URL, stores into cache, and registers locally.
+
+1) Add "installable gated models" registry entries
+- Add entries with `distribution=:installable_gated`, for example:
+  - `:llama2_tokenizer` (SentencePiece)
+  - `:llama3_8b_tokenizer` (prefer tokenizer.json if available, otherwise documented alternatives)
+- These are not "shipped" and not in Artifacts.toml, but they appear in:
+  - `available_models(distribution=:installable_gated)` or similar.
+
+2) Implement installer API
+- `install_model!(key::Symbol; token=nothing, revision="main", force=false)`
+  - Looks up registry entry
+  - Calls `download_hf_files(...)` (already exists) for the listed filenames
+  - Stores them under `KEEMENA_SUBWORDS_CACHE_DIR/install/<key>/...`
+  - Calls `register_local_model!(key, installed_dir; format=..., family=:llama, description=...)`
+- Optional: add `install_llama2_tokenizer!` and `install_llama3_tokenizer!` wrappers for discoverability.
+
+3) Loading behavior after install
+- `load_tokenizer(:llama3_8b_tokenizer)` should:
+  - first check user local registry key (installed)
+  - then fall back to regular built-ins
+  - never silently attempt gated downloads without explicit `install_model!`
+
+4) Docs
+- Add a clear docs section:
+  - "LLaMA tokenizers are gated; you must accept Meta license and have access"
+  - "Use install_model! with HF token or use manual path loading"
+
+5) Tests
+- Add a unit test for install flow without network:
+  - when token is missing, ensure a clear error message that explains how to proceed
+- Add optional network test (ENV gated):
+  - attempts to download only tokenizer files for a gated model when token is provided
+
+### 12.4 Suggested implementation order
+1) Auto-generate README and docs models tables from registry (kills drift fast).
+2) Fix registry helper naming drift (register_local_model! vs register_external_model!).
+3) Make multilingual WordPiece artifact fully solid + tests.
+4) Add LLaMA install_model! workflow + docs.
+5) Optional: add :bert_base_cased_wordpiece.
+
+
+## 2026-02-09 - Iteration 12
+
+### Objective
+Complete plan section `## 12)` by eliminating README/docs model drift, hardening WordPiece artifact coverage, and adding one-command gated LLaMA tokenizer install flow without redistributing gated assets.
+
+### Completed section-12 implementation
+- Extended model registry metadata in `src/models.jl` so each entry now carries:
+  - `format`, `family`, `distribution`, `license`, `description`
+  - `upstream_repo`, `upstream_ref`
+  - existing artifact/fallback path fields
+- Added distribution model taxonomy and filtering:
+  - `:shipped`, `:artifact_public`, `:installable_gated`, `:user_local`
+  - `available_models(; format, family, distribution, shipped)`
+- Added installable gated model entries (no artifact redistribution):
+  - `:llama2_tokenizer` (`:sentencepiece_model`)
+  - `:llama3_8b_tokenizer` (`:hf_tokenizer_json`)
+- Implemented one-command install API for gated models:
+  - `install_model!(key; token, revision="main", force=false)`
+  - convenience wrappers:
+    - `install_llama2_tokenizer!`
+    - `install_llama3_8b_tokenizer!`
+- Added guarded UX for missing gated assets:
+  - `load_tokenizer(:llama*_...)` and `model_path(:llama*_...)` now return actionable install guidance when files are not present.
+- Fixed local/external helper naming drift:
+  - canonical API remains `register_local_model!`
+  - `register_external_model!` now behaves as a deprecated compatibility alias (deprecation warning).
+- Strengthened local registry persistence schema:
+  - persisted metadata now includes `distribution` and `upstream_repo` in addition to format/path/description/family/license/upstream_ref.
+
+### README/docs drift elimination
+- Added generated inventory markers to both:
+  - `README.md`
+  - `docs/src/models.md`
+- Added generator/check script:
+  - `tools/sync_readme_models.jl`
+  - renders grouped markdown table (format/family) from registry data
+  - updates both README and docs models page from the same generated content
+  - supports `--check` mode for CI drift detection
+- Added CI enforcement step in `.github/workflows/CI.yml`:
+  - `julia --project=. tools/sync_readme_models.jl --check`
+- Updated docs/loading/index examples for section-12 workflow:
+  - canonical local registration API (`register_local_model!`)
+  - explicit gated install usage with `install_model!`
+  - distribution-aware model discovery examples.
+
+### WordPiece artifact coverage status
+- Confirmed multilingual WordPiece remains first-class and artifact-backed:
+  - key: `:bert_base_multilingual_cased_wordpiece`
+  - artifact binding present in `Artifacts.toml` (lazy, sha-verified)
+  - provenance visible in `describe_model(...)`
+- Tests now always validate registry/metadata expectations for multilingual WordPiece and keep network-sensitive prefetch assertions optional.
+
+### Tests/docs updates
+- Updated `test/runtests.jl` to section label `sections 1-12`.
+- Added/extended section-12 tests for:
+  - distribution filters and gated key visibility
+  - gated install flow missing-token error messaging
+  - multilingual WordPiece metadata coverage
+- Kept deterministic behavior for CI by gating network-sensitive checks via environment variables.
+
+### Verification
+- Ran: `julia --project=. tools/sync_readme_models.jl`
+  - Result: README/docs model inventory sections regenerated from registry.
+- Ran: `julia --project=. tools/sync_readme_models.jl --check`
+  - Result: sync check passes.
+- Ran: `julia --project=. -e 'using Pkg; Pkg.test()'`
+  - Result: `169/169` tests passed (`KeemenaSubwords sections 1-12`).
+- Ran: `julia --project=docs docs/make.jl`
+  - Result: docs build successful.
+
+### Notes
+- LLaMA tokenizer files are not shipped in `Artifacts.toml` and are not redistributed by this repository.
+- Installation is explicit/opt-in via `install_model!` and requires user-provided access credentials.

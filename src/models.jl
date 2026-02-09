@@ -12,194 +12,290 @@ const _CACHE_ROOT = normpath(get(ENV, "KEEMENA_SUBWORDS_CACHE_DIR", _DEFAULT_CAC
 const _LOCAL_MODELS_TOML = joinpath(_CACHE_ROOT, "local_models.toml")
 const _LOCAL_MODELS_LOADED = Ref(false)
 const _PERSISTED_LOCAL_KEYS = Set{Symbol}()
+const _UPSTREAM_FILE_INFO = NamedTuple{(:relative_path, :url, :sha256),Tuple{String,String,Union{Nothing,String}}}
+const _VALID_MODEL_DISTRIBUTIONS = Set{Symbol}((
+    :shipped,
+    :artifact_public,
+    :installable_gated,
+    :user_local,
+))
 
 struct BuiltinModelEntry
     format::Symbol
+    family::Symbol
+    distribution::Symbol
     artifact_name::Union{Nothing,String}
     artifact_subpath::Union{Nothing,String}
     fallback_path::String
     description::String
     license::String
+    upstream_repo::String
     upstream_ref::String
+end
+
+function _validate_distribution(distribution::Symbol)::Symbol
+    distribution in _VALID_MODEL_DISTRIBUTIONS || throw(ArgumentError("Unsupported model distribution: $distribution"))
+    return distribution
 end
 
 _entry(
     format::Symbol,
+    family::Symbol,
+    distribution::Symbol,
     artifact_name::Union{Nothing,String},
     artifact_subpath::Union{Nothing,String},
     fallback_path::String,
     description::String,
     license::String,
+    upstream_repo::String,
     upstream_ref::String,
 ) = BuiltinModelEntry(
     format,
+    family,
+    _validate_distribution(distribution),
     artifact_name,
     artifact_subpath,
     fallback_path,
     description,
     license,
+    upstream_repo,
     upstream_ref,
 )
 
 const _MODEL_REGISTRY = Dict{Symbol,BuiltinModelEntry}(
     :core_bpe_en => _entry(
         :bpe,
+        :core,
+        :shipped,
         "core_bpe_en",
         "core_bpe_en",
         joinpath(_PACKAGE_ROOT, "models", "core_bpe_en"),
         "Tiny built-in English classic BPE model (vocab.txt + merges.txt).",
         "MIT",
+        "in-repo/core",
         "in-repo:core",
     ),
     :core_wordpiece_en => _entry(
         :wordpiece_vocab,
+        :core,
+        :shipped,
         "core_wordpiece_en",
         "core_wordpiece_en/vocab.txt",
         joinpath(_PACKAGE_ROOT, "models", "core_wordpiece_en", "vocab.txt"),
         "Tiny built-in English WordPiece model.",
         "MIT",
+        "in-repo/core",
         "in-repo:core",
     ),
     :core_sentencepiece_unigram_en => _entry(
         :sentencepiece_model,
+        :core,
+        :shipped,
         "core_sentencepiece_unigram_en",
         "core_sentencepiece_unigram_en/spm.model",
         joinpath(_PACKAGE_ROOT, "models", "core_sentencepiece_unigram_en", "spm.model"),
         "Tiny built-in SentencePiece Unigram model (.model).",
         "MIT",
+        "in-repo/core",
         "in-repo:core",
     ),
     :tiktoken_o200k_base => _entry(
         :tiktoken,
+        :openai,
+        :artifact_public,
         "keemena_public_tokenizer_assets_v1",
         "tiktoken/o200k_base/o200k_base.tiktoken",
         joinpath(_ARTIFACT_ONLY_ROOT, "tiktoken", "o200k_base", "o200k_base.tiktoken"),
         "OpenAI tiktoken o200k_base encoding.",
         "MIT",
+        "openaipublic/encodings",
         "openaipublic:encodings/o200k_base.tiktoken",
     ),
     :tiktoken_cl100k_base => _entry(
         :tiktoken,
+        :openai,
+        :artifact_public,
         "keemena_public_tokenizer_assets_v1",
         "tiktoken/cl100k_base/cl100k_base.tiktoken",
         joinpath(_ARTIFACT_ONLY_ROOT, "tiktoken", "cl100k_base", "cl100k_base.tiktoken"),
         "OpenAI tiktoken cl100k_base encoding.",
         "MIT",
+        "openaipublic/encodings",
         "openaipublic:encodings/cl100k_base.tiktoken",
     ),
     :tiktoken_r50k_base => _entry(
         :tiktoken,
+        :openai,
+        :artifact_public,
         "keemena_public_tokenizer_assets_v1",
         "tiktoken/r50k_base/r50k_base.tiktoken",
         joinpath(_ARTIFACT_ONLY_ROOT, "tiktoken", "r50k_base", "r50k_base.tiktoken"),
         "OpenAI tiktoken r50k_base encoding.",
         "MIT",
+        "openaipublic/encodings",
         "openaipublic:encodings/r50k_base.tiktoken",
     ),
     :tiktoken_p50k_base => _entry(
         :tiktoken,
+        :openai,
+        :artifact_public,
         "keemena_public_tokenizer_assets_v1",
         "tiktoken/p50k_base/p50k_base.tiktoken",
         joinpath(_ARTIFACT_ONLY_ROOT, "tiktoken", "p50k_base", "p50k_base.tiktoken"),
         "OpenAI tiktoken p50k_base encoding.",
         "MIT",
+        "openaipublic/encodings",
         "openaipublic:encodings/p50k_base.tiktoken",
     ),
     :openai_gpt2_bpe => _entry(
         :bpe_gpt2,
+        :openai,
+        :artifact_public,
         "keemena_public_tokenizer_assets_v1",
         "bpe/openai_gpt2",
         joinpath(_ARTIFACT_ONLY_ROOT, "bpe", "openai_gpt2"),
         "OpenAI GPT-2 byte-level BPE assets (encoder.json + vocab.bpe).",
         "MIT",
+        "openaipublic/gpt-2",
         "openaipublic:gpt-2/encodings/main",
     ),
     :bert_base_uncased_wordpiece => _entry(
         :wordpiece_vocab,
+        :bert,
+        :artifact_public,
         "keemena_public_tokenizer_assets_v1",
         "wordpiece/bert_base_uncased/vocab.txt",
         joinpath(_ARTIFACT_ONLY_ROOT, "wordpiece", "bert_base_uncased", "vocab.txt"),
         "Hugging Face bert-base-uncased WordPiece vocabulary.",
         "Apache-2.0",
+        "bert-base-uncased",
         "huggingface:bert-base-uncased@86b5e0934494bd15c9632b12f734a8a67f723594",
     ),
     :t5_small_sentencepiece_unigram => _entry(
         :sentencepiece_model,
+        :t5,
+        :artifact_public,
         "keemena_public_tokenizer_assets_v1",
         "sentencepiece/t5_small/spiece.model",
         joinpath(_ARTIFACT_ONLY_ROOT, "sentencepiece", "t5_small", "spiece.model"),
         "Hugging Face google-t5/t5-small SentencePiece model (Unigram).",
         "Apache-2.0",
+        "google-t5/t5-small",
         "huggingface:google-t5/t5-small@df1b051c49625cf57a3d0d8d3863ed4d13564fe4",
     ),
     :mistral_v1_sentencepiece => _entry(
         :sentencepiece_model,
+        :mistral,
+        :artifact_public,
         "mistral_v1_sentencepiece",
         "mistral_v1_sentencepiece",
         joinpath(_ARTIFACT_ONLY_ROOT, "mistral_v1_sentencepiece"),
         "Mistral/Mixtral tokenizer.model SentencePiece model.",
         "Apache-2.0",
+        "mistralai/Mixtral-8x7B-Instruct-v0.1",
         "huggingface:mistralai/Mixtral-8x7B-Instruct-v0.1@eba92302a2861cdc0098cc54bc9f17cb2c47eb61",
     ),
     :mistral_v3_sentencepiece => _entry(
         :sentencepiece_model,
+        :mistral,
+        :artifact_public,
         "mistral_v3_sentencepiece",
         "mistral_v3_sentencepiece",
         joinpath(_ARTIFACT_ONLY_ROOT, "mistral_v3_sentencepiece"),
         "Mistral-7B-Instruct-v0.3 tokenizer.model.v3 SentencePiece model.",
         "Apache-2.0",
+        "mistralai/Mistral-7B-Instruct-v0.3",
         "huggingface:mistralai/Mistral-7B-Instruct-v0.3@c170c708c41dac9275d15a8fff4eca08d52bab71",
     ),
     :phi2_bpe => _entry(
         :bpe_gpt2,
+        :phi,
+        :artifact_public,
         "phi2_bpe",
         "phi2_bpe",
         joinpath(_ARTIFACT_ONLY_ROOT, "phi2_bpe"),
         "Microsoft Phi-2 GPT2-style tokenizer files (vocab.json + merges.txt).",
         "MIT",
+        "microsoft/phi-2",
         "huggingface:microsoft/phi-2@810d367871c1d460086d9f82db8696f2e0a0fcd0",
     ),
     :qwen2_5_bpe => _entry(
         :hf_tokenizer_json,
+        :qwen,
+        :artifact_public,
         "qwen2_5_bpe",
         "qwen2_5_bpe",
         joinpath(_ARTIFACT_ONLY_ROOT, "qwen2_5_bpe"),
         "Qwen2.5 BPE tokenizer assets (tokenizer.json with vocab/merges fallback).",
         "Apache-2.0",
+        "Qwen/Qwen2.5-7B",
         "huggingface:Qwen/Qwen2.5-7B@d149729398750b98c0af14eb82c78cfe92750796",
     ),
     :bert_base_multilingual_cased_wordpiece => _entry(
         :wordpiece_vocab,
+        :bert,
+        :artifact_public,
         "bert_base_multilingual_cased_wordpiece",
         "bert_base_multilingual_cased_wordpiece/vocab.txt",
         joinpath(_ARTIFACT_ONLY_ROOT, "bert_base_multilingual_cased_wordpiece", "vocab.txt"),
         "Hugging Face bert-base-multilingual-cased WordPiece vocabulary.",
         "Apache-2.0",
+        "google-bert/bert-base-multilingual-cased",
         "huggingface:google-bert/bert-base-multilingual-cased@3f076fdb1ab68d5b2880cb87a0886f315b8146f8",
     ),
     :roberta_base_bpe => _entry(
         :bpe_gpt2,
+        :roberta,
+        :artifact_public,
         "roberta_base_bpe",
         "roberta_base_bpe",
         joinpath(_ARTIFACT_ONLY_ROOT, "roberta_base_bpe"),
         "RoBERTa-base byte-level BPE tokenizer files (vocab.json + merges.txt).",
         "MIT",
+        "FacebookAI/roberta-base",
         "huggingface:FacebookAI/roberta-base@e2da8e2f811d1448a5b465c236feacd80ffbac7b",
     ),
     :xlm_roberta_base_sentencepiece_bpe => _entry(
         :sentencepiece_model,
+        :xlm_roberta,
+        :artifact_public,
         "xlm_roberta_base_sentencepiece_bpe",
         "xlm_roberta_base_sentencepiece_bpe",
         joinpath(_ARTIFACT_ONLY_ROOT, "xlm_roberta_base_sentencepiece_bpe"),
         "XLM-RoBERTa-base sentencepiece.bpe.model file.",
         "MIT",
+        "FacebookAI/xlm-roberta-base",
         "huggingface:FacebookAI/xlm-roberta-base@e73636d4f797dec63c3081bb6ed5c7b0bb3f2089",
+    ),
+    :llama2_tokenizer => _entry(
+        :sentencepiece_model,
+        :llama,
+        :installable_gated,
+        nothing,
+        nothing,
+        joinpath(_CACHE_ROOT, "install", "llama2_tokenizer"),
+        "Meta Llama 2 tokenizer (gated; install with install_model!).",
+        "Llama-2-Community-License",
+        "meta-llama/Llama-2-7b-hf",
+        "huggingface:meta-llama/Llama-2-7b-hf@main",
+    ),
+    :llama3_8b_tokenizer => _entry(
+        :hf_tokenizer_json,
+        :llama,
+        :installable_gated,
+        nothing,
+        nothing,
+        joinpath(_CACHE_ROOT, "install", "llama3_8b_tokenizer"),
+        "Meta Llama 3 8B tokenizer (gated; install with install_model!).",
+        "Llama-3.1-Community-License",
+        "meta-llama/Meta-Llama-3-8B-Instruct",
+        "huggingface:meta-llama/Meta-Llama-3-8B-Instruct@main",
     ),
 )
 
 const _MODEL_UPSTREAM_FILES = Dict{
     Symbol,
-    Vector{NamedTuple{(:relative_path, :url, :sha256),Tuple{String,String,Union{Nothing,String}}}},
+    Vector{_UPSTREAM_FILE_INFO},
 }(
     :tiktoken_o200k_base => [
         (
@@ -329,26 +425,25 @@ const _MODEL_UPSTREAM_FILES = Dict{
             sha256 = "cfc8146abe2a0488e9e2a0c56de7952f7c11ab059eca145a0a727afce0db2865",
         ),
     ],
-)
-
-const _MODEL_FAMILY = Dict{Symbol,Symbol}(
-    :core_bpe_en => :core,
-    :core_wordpiece_en => :core,
-    :core_sentencepiece_unigram_en => :core,
-    :tiktoken_o200k_base => :openai,
-    :tiktoken_cl100k_base => :openai,
-    :tiktoken_r50k_base => :openai,
-    :tiktoken_p50k_base => :openai,
-    :openai_gpt2_bpe => :openai,
-    :bert_base_uncased_wordpiece => :bert,
-    :t5_small_sentencepiece_unigram => :t5,
-    :mistral_v1_sentencepiece => :mistral,
-    :mistral_v3_sentencepiece => :mistral,
-    :phi2_bpe => :phi,
-    :qwen2_5_bpe => :qwen,
-    :bert_base_multilingual_cased_wordpiece => :bert,
-    :roberta_base_bpe => :roberta,
-    :xlm_roberta_base_sentencepiece_bpe => :xlm_roberta,
+    :llama2_tokenizer => [
+        (
+            relative_path = "tokenizer.model",
+            url = "https://huggingface.co/meta-llama/Llama-2-7b-hf/resolve/main/tokenizer.model",
+            sha256 = nothing,
+        ),
+    ],
+    :llama3_8b_tokenizer => [
+        (
+            relative_path = "tokenizer.json",
+            url = "https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct/resolve/main/tokenizer.json",
+            sha256 = nothing,
+        ),
+        (
+            relative_path = "tokenizer_config.json",
+            url = "https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct/resolve/main/tokenizer_config.json",
+            sha256 = nothing,
+        ),
+    ],
 )
 
 """
@@ -358,6 +453,7 @@ function available_models(
     ;
     format::Union{Nothing,Symbol}=nothing,
     family::Union{Nothing,Symbol}=nothing,
+    distribution::Union{Nothing,Symbol}=nothing,
     shipped::Union{Nothing,Bool}=nothing,
 )::Vector{Symbol}
     _ensure_local_models_loaded()
@@ -366,7 +462,10 @@ function available_models(
         names = [name for name in names if _matches_format(_MODEL_REGISTRY[name].format, format)]
     end
     if family !== nothing
-        names = [name for name in names if get(_MODEL_FAMILY, name, :unknown) == family]
+        names = [name for name in names if _MODEL_REGISTRY[name].family == family]
+    end
+    if distribution !== nothing
+        names = [name for name in names if _MODEL_REGISTRY[name].distribution == distribution]
     end
     if shipped !== nothing
         names = [name for name in names if _is_shipped_entry(_MODEL_REGISTRY[name]) == shipped]
@@ -376,37 +475,46 @@ function available_models(
 end
 
 """
-Register an external tokenizer path under a symbolic key.
-
-This supports user-managed assets (for example gated Llama tokenizers)
-without bundling them as built-ins.
+Internal helper for registering/updating model entries.
 """
-function register_external_model!(
+function _register_model_entry!(
     key::Symbol,
     path::AbstractString;
     format::Symbol,
-    description::AbstractString="User-supplied external tokenizer",
-    family::Symbol=:external,
-    license::AbstractString="external-user-supplied",
-    upstream_ref::AbstractString="user-supplied",
+    description::AbstractString,
+    family::Symbol,
+    license::AbstractString,
+    upstream_repo::AbstractString,
+    upstream_ref::AbstractString,
+    distribution::Symbol,
+    upstream_files::Vector{_UPSTREAM_FILE_INFO}=Vector{_UPSTREAM_FILE_INFO}(),
+    persist::Bool=false,
 )::Nothing
     resolved_path = normpath(String(path))
     _MODEL_REGISTRY[key] = _entry(
         format,
+        family,
+        distribution,
         nothing,
         nothing,
         resolved_path,
         String(description),
         String(license),
+        String(upstream_repo),
         String(upstream_ref),
     )
-    _MODEL_UPSTREAM_FILES[key] = Vector{NamedTuple{(:relative_path, :url, :sha256),Tuple{String,String,Union{Nothing,String}}}}()
-    _MODEL_FAMILY[key] = family
+
+    _MODEL_UPSTREAM_FILES[key] = Vector{_UPSTREAM_FILE_INFO}(upstream_files)
+
+    if persist
+        push!(_PERSISTED_LOCAL_KEYS, key)
+        _write_local_models_registry()
+    end
     return nothing
 end
 
 """
-Persist a local user model registration in cache and load it into the active registry.
+Register a local tokenizer path under a symbolic key and persist it in the cache registry.
 """
 function register_local_model!(
     key::Symbol,
@@ -415,21 +523,58 @@ function register_local_model!(
     description::AbstractString="User-supplied local tokenizer",
     family::Symbol=:local,
     license::AbstractString="external-user-supplied",
+    upstream_repo::AbstractString="user-supplied",
     upstream_ref::AbstractString="user-supplied",
+    distribution::Symbol=:user_local,
+    upstream_files::Vector{_UPSTREAM_FILE_INFO}=Vector{_UPSTREAM_FILE_INFO}(),
 )::Nothing
     _ensure_local_models_loaded()
-    register_external_model!(
+    _register_model_entry!(
         key,
         path_or_dir;
         format=format,
         description=description,
         family=family,
         license=license,
+        upstream_repo=upstream_repo,
         upstream_ref=upstream_ref,
+        distribution=distribution,
+        upstream_files=upstream_files,
+        persist=true,
     )
+    return nothing
+end
 
-    push!(_PERSISTED_LOCAL_KEYS, key)
-    _write_local_models_registry()
+"""
+Deprecated alias kept for compatibility. Use `register_local_model!` instead.
+"""
+function register_external_model!(
+    key::Symbol,
+    path::AbstractString;
+    format::Symbol,
+    description::AbstractString="User-supplied external tokenizer",
+    family::Symbol=:external,
+    license::AbstractString="external-user-supplied",
+    upstream_repo::AbstractString="user-supplied",
+    upstream_ref::AbstractString="user-supplied",
+)::Nothing
+    Base.depwarn(
+        "register_external_model! is deprecated; use register_local_model! instead.",
+        :register_external_model!,
+    )
+    _ensure_local_models_loaded()
+    _register_model_entry!(
+        key,
+        path;
+        format=format,
+        description=description,
+        family=family,
+        license=license,
+        upstream_repo=upstream_repo,
+        upstream_ref=upstream_ref,
+        distribution=:user_local,
+        persist=false,
+    )
     return nothing
 end
 
@@ -480,6 +625,63 @@ function download_hf_files(
 end
 
 """
+Install an installable-gated tokenizer into the user cache and register it by key.
+"""
+function install_model!(
+    key::Symbol;
+    token::Union{Nothing,AbstractString}=nothing,
+    revision::AbstractString="main",
+    force::Bool=false,
+)::NamedTuple
+    _ensure_local_models_loaded()
+    haskey(_MODEL_REGISTRY, key) || throw(ArgumentError("Unknown model key: $key"))
+    entry = _MODEL_REGISTRY[key]
+    entry.distribution == :installable_gated || throw(ArgumentError(
+        "Model $key is not installable_gated (distribution=$(entry.distribution)). Use prefetch_models for shipped/artifact models.",
+    ))
+
+    token_value = token === nothing ? nothing : String(token)
+    (token_value === nothing || isempty(strip(token_value))) && throw(ArgumentError(
+        "Model $key is gated. Provide an access token (for example token=ENV[\"HF_TOKEN\"]) after accepting the upstream license.",
+    ))
+
+    upstream_files = get(_MODEL_UPSTREAM_FILES, key, Vector{_UPSTREAM_FILE_INFO}())
+    isempty(upstream_files) && throw(ArgumentError("No upstream files are registered for installable model $key"))
+
+    repo_id = entry.upstream_repo
+    isempty(repo_id) && throw(ArgumentError("Installable model $key does not define an upstream repository."))
+
+    filenames = [f.relative_path for f in upstream_files]
+    install_dir = joinpath(_CACHE_ROOT, "install", String(key))
+    download_hf_files(
+        repo_id,
+        filenames;
+        revision=revision,
+        outdir=install_dir,
+        token=token_value,
+        force=force,
+    )
+
+    register_local_model!(
+        key,
+        install_dir;
+        format=entry.format,
+        description=entry.description,
+        family=entry.family,
+        license=entry.license,
+        upstream_repo=repo_id,
+        upstream_ref="huggingface:$(repo_id)@$(revision)",
+        distribution=:installable_gated,
+        upstream_files=upstream_files,
+    )
+
+    return describe_model(key)
+end
+
+install_llama2_tokenizer!(; kwargs...) = install_model!(:llama2_tokenizer; kwargs...)
+install_llama3_8b_tokenizer!(; kwargs...) = install_model!(:llama3_8b_tokenizer; kwargs...)
+
+"""
 Recommended built-in keys for LLM-oriented default prefetching.
 """
 function recommended_defaults_for_llms()::Vector{Symbol}
@@ -501,7 +703,7 @@ Ensure artifact-backed built-in models are present on disk.
 Returns a dictionary of `key => is_available`.
 """
 function prefetch_models(
-    keys::AbstractVector{Symbol}=available_models();
+    keys::AbstractVector{Symbol}=available_models(shipped=true);
     force::Bool=false,
 )::Dict{Symbol,Bool}
     _ensure_local_models_loaded()
@@ -532,7 +734,7 @@ function describe_model(name::Symbol)::NamedTuple
     entry = _MODEL_REGISTRY[name]
     resolved = _resolve_model_path(entry)
     source = _resolve_model_source(entry, resolved)
-    upstream = get(_MODEL_UPSTREAM_FILES, name, NamedTuple[])
+    upstream = get(_MODEL_UPSTREAM_FILES, name, Vector{_UPSTREAM_FILE_INFO}())
     files = _resolved_model_files(entry, resolved)
     exists = !isempty(files) && all(ispath, files)
 
@@ -546,8 +748,10 @@ function describe_model(name::Symbol)::NamedTuple
         source = source,
         shipped = _is_shipped_entry(entry),
         description = entry.description,
-        family = get(_MODEL_FAMILY, name, :unknown),
+        family = entry.family,
+        distribution = entry.distribution,
         license = entry.license,
+        upstream_repo = entry.upstream_repo,
         upstream_ref = entry.upstream_ref,
         artifact_name = entry.artifact_name,
         upstream_files = upstream,
@@ -583,7 +787,14 @@ function model_path(name::Symbol; auto_prefetch::Bool=true)::String
         info = describe_model(name)
     end
 
-    info.exists || throw(ArgumentError("Model asset missing on disk for $name at $(info.path)"))
+    if !info.exists
+        if info.distribution == :installable_gated
+            throw(ArgumentError(
+                "Model asset missing on disk for $name at $(info.path). Install it first with install_model!(:$name; token=ENV[\"HF_TOKEN\"]).",
+            ))
+        end
+        throw(ArgumentError("Model asset missing on disk for $name at $(info.path)"))
+    end
     return info.path
 end
 
@@ -720,7 +931,7 @@ function _expected_model_files(entry::BuiltinModelEntry)::Vector{String}
 end
 
 function _is_shipped_entry(entry::BuiltinModelEntry)::Bool
-    return entry.artifact_name !== nothing || startswith(entry.upstream_ref, "in-repo:")
+    return entry.distribution in (:shipped, :artifact_public)
 end
 
 function _ensure_local_models_loaded()::Nothing
@@ -749,16 +960,22 @@ function _ensure_local_models_loaded()::Nothing
         description = String(get(entry_any, "description", "User-supplied local tokenizer"))
         family = Symbol(String(get(entry_any, "family", "local")))
         license = String(get(entry_any, "license", "external-user-supplied"))
+        upstream_repo = String(get(entry_any, "upstream_repo", "user-supplied"))
         upstream_ref = String(get(entry_any, "upstream_ref", "user-supplied"))
+        distribution = Symbol(String(get(entry_any, "distribution", "user_local")))
+        distribution in _VALID_MODEL_DISTRIBUTIONS || (distribution = :user_local)
 
-        register_external_model!(
+        _register_model_entry!(
             key,
             String(path);
             format=Symbol(format_raw),
             description=description,
             family=family,
             license=license,
+            upstream_repo=upstream_repo,
             upstream_ref=upstream_ref,
+            distribution=distribution,
+            persist=false,
         )
 
         push!(_PERSISTED_LOCAL_KEYS, key)
@@ -778,8 +995,10 @@ function _write_local_models_registry()::Nothing
             "path" => entry.fallback_path,
             "format" => String(entry.format),
             "description" => entry.description,
-            "family" => String(get(_MODEL_FAMILY, key, :local)),
+            "family" => String(entry.family),
+            "distribution" => String(entry.distribution),
             "license" => entry.license,
+            "upstream_repo" => entry.upstream_repo,
             "upstream_ref" => entry.upstream_ref,
         )
     end

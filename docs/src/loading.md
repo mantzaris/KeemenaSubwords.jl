@@ -37,6 +37,11 @@ load_tokenizer("/path/to/tokenizer.model")                                  # Ll
 load_tokenizer("/path/to/llama3_tokenizer.tiktoken"; format=:tiktoken)      # Llama 3 style tiktoken
 load_tokenizer("/path/to/tekken_like.tiktoken"; format=:tiktoken)           # Mistral Tekken-like file
 
+# installable gated models (requires accepted license + token)
+install_model!(:llama2_tokenizer; token=ENV["HF_TOKEN"])
+install_model!(:llama3_8b_tokenizer; token=ENV["HF_TOKEN"])
+load_tokenizer(:llama3_8b_tokenizer)
+
 # optional key registration for external assets
 register_local_model!(
     :my_llama_external,
@@ -55,3 +60,5 @@ download_hf_files(
     token=get(ENV, "HF_TOKEN", nothing),
 )
 ```
+
+LLaMA tokenizer files are gated by upstream license terms. KeemenaSubwords does not redistribute those assets and only installs them into your local cache when you call `install_model!`.

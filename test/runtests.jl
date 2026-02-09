@@ -4,7 +4,7 @@ using KeemenaSubwords
 const FIXTURES_DIR = joinpath(@__DIR__, "fixtures")
 fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
 
-@testset "KeemenaSubwords sections 1-11" begin
+@testset "KeemenaSubwords sections 1-12" begin
     @testset "Model registry" begin
         names = available_models()
         @test :core_bpe_en in names
@@ -22,6 +22,8 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
         @test :qwen2_5_bpe in names
         @test :roberta_base_bpe in names
         @test :xlm_roberta_base_sentencepiece_bpe in names
+        @test :llama2_tokenizer in names
+        @test :llama3_8b_tokenizer in names
 
         info = describe_model(:core_bpe_en)
         @test info.format == :bpe
@@ -45,6 +47,12 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
         @test available_models(family=:qwen) == [:qwen2_5_bpe]
         @test :core_bpe_en in available_models(shipped=true)
         @test :qwen2_5_bpe in available_models(format=:hf_tokenizer_json)
+        gated = available_models(distribution=:installable_gated)
+        @test :llama2_tokenizer in gated
+        @test :llama3_8b_tokenizer in gated
+        llama_info = describe_model(:llama3_8b_tokenizer)
+        @test llama_info.distribution == :installable_gated
+        @test !llama_info.shipped
         @test :qwen2_5_bpe in recommended_defaults_for_llms()
     end
 
@@ -223,14 +231,20 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
         @test bert isa WordPieceTokenizer
         @test !isempty(tokenize(bert, "hello keemena"))
 
+        info = describe_model(:bert_base_multilingual_cased_wordpiece)
+        @test info.distribution == :artifact_public
+        @test "vocab.txt" in info.expected_files
+
         multi = prefetch_models([:bert_base_multilingual_cased_wordpiece])
         @test haskey(multi, :bert_base_multilingual_cased_wordpiece)
         if multi[:bert_base_multilingual_cased_wordpiece]
             bert_multi = load_tokenizer(:bert_base_multilingual_cased_wordpiece)
             @test bert_multi isa WordPieceTokenizer
             @test !isempty(tokenize(bert_multi, "hello mundo"))
+        elseif get(ENV, "KEEMENA_RUN_NETWORK_TESTS", "0") == "1"
+            # In explicit network mode this should be downloadable.
+            @test multi[:bert_base_multilingual_cased_wordpiece]
         else
-            info = describe_model(:bert_base_multilingual_cased_wordpiece)
             @test info.format == :wordpiece_vocab
         end
 
@@ -282,7 +296,7 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
     @testset "Section 10 external model registration" begin
         ext_key = :external_test_bpe
         ext_path = fixture("bpe")
-        register_external_model!(
+        register_local_model!(
             ext_key,
             ext_path;
             format=:bpe,
@@ -324,6 +338,26 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
             @test length(files) == 1
             @test isfile(files[1])
         end
+    end
+
+    @testset "Section 12 installable gated model flow" begin
+        err = try
+            install_model!(:llama3_8b_tokenizer)
+            nothing
+        catch ex
+            ex
+        end
+        @test err isa ArgumentError
+        @test occursin("Provide an access token", sprint(showerror, err))
+
+        err2 = try
+            install_model!(:llama2_tokenizer; token="")
+            nothing
+        catch ex
+            ex
+        end
+        @test err2 isa ArgumentError
+        @test occursin("gated", lowercase(sprint(showerror, err2)))
     end
 
     @testset "Section 4 integration helpers" begin

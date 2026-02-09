@@ -10,6 +10,14 @@ function load_tokenizer(
         prefetch_models([name])
     end
     info = describe_model(name)
+    if !info.exists
+        if info.distribution == :installable_gated
+            throw(ArgumentError(
+                "Model $name is gated and not installed. Run install_model!(:$name; token=ENV[\"HF_TOKEN\"]) first.",
+            ))
+        end
+        throw(ArgumentError("Model asset missing on disk for $name at $(info.path)"))
+    end
     return load_tokenizer(info.path; format=info.format, model_name=String(name), kwargs...)
 end
 

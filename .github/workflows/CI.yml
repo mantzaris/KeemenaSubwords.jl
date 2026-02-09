@@ -38,6 +38,8 @@ jobs:
           arch: ${{ matrix.arch }}
       - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@v1
+      - name: Verify model inventory sync
+        run: julia --project=. tools/sync_readme_models.jl --check
       - uses: julia-actions/julia-runtest@v1
   docs:
     name: Documentation
