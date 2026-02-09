@@ -767,3 +767,102 @@ Complete plan section `## 12)` by eliminating README/docs model drift, hardening
 ### Notes
 - LLaMA tokenizer files are not shipped in `Artifacts.toml` and are not redistributed by this repository.
 - Installation is explicit/opt-in via `install_model!` and requires user-provided access credentials.
+
+## 2026-02-09 - Iteration 13
+
+### Objective
+Complete plan section `## 13)` by consolidating docs, slimming README, and formalizing path-based loader contracts with robust format detection and clearer validation errors across tokenizer families.
+
+### Completed section-13 implementation
+
+#### Documentation consolidation
+- Slimmed `README.md` to a quickstart-focused entry point:
+  - concise overview,
+  - install,
+  - minimal usage examples,
+  - featured model list,
+  - links to docs pages.
+- Added new docs pages:
+  - `docs/src/formats.md`
+  - `docs/src/loading_local.md`
+  - `docs/src/llm_cookbook.md`
+  - `docs/src/gated_models.md`
+  - `docs/src/troubleshooting.md`
+- Updated docs nav in `docs/make.jl` to include the new pages.
+- Kept the full model inventory table in docs only (`docs/src/models.md`) and preserved generation from registry metadata via `tools/sync_readme_models.jl` (docs marker section only).
+
+#### Explicit loader contracts and convenience APIs
+- Added/exported explicit public loaders:
+  - `load_bpe_gpt2(vocab_json, merges_txt; byte_level=true, ...)`
+  - `load_bpe_encoder(encoder_json, vocab_bpe; byte_level=true, ...)`
+  - plus explicit exports for `load_wordpiece`, `load_sentencepiece`, `load_tiktoken`, and existing `load_hf_tokenizer_json`.
+- Added/exported detection helpers:
+  - `detect_tokenizer_files(dir)`
+  - `detect_tokenizer_format(path)`
+- Updated `load_tokenizer(path; format=...)` dispatch to support:
+  - `format=:bpe_encoder`
+  - `format=:sentencepiece_model`
+  - explicit path-pair routing for GPT-2/BPE encoder variants.
+
+#### Robust auto-detection and `.model` sniffing
+- Implemented directory/file detection logic in `src/io.jl` with explicit precedence:
+  1) `tokenizer.json`
+  2) `vocab.json + merges.txt`
+  3) `encoder.json + vocab.bpe`
+  4) SentencePiece model filenames
+  5) `.tiktoken`
+  6) fallback classic BPE / WordPiece / Unigram indicators
+- Added `.model` sniffing behavior:
+  - tiktoken-like text payload -> `:tiktoken`
+  - SentencePiece-like/binary payload -> `:sentencepiece_model`
+- Preserved override behavior (`format=` always wins).
+
+#### Loader validation and error clarity
+- Improved validation/error messaging with expected-file guidance and example calls in:
+  - GPT-2/BPE encoder loaders,
+  - WordPiece path resolution,
+  - SentencePiece path/type loading,
+  - tiktoken path/file parsing,
+  - HF tokenizer.json path resolution.
+
+#### Local model registry ergonomics
+- Extended `register_local_model!` to support:
+  - path registration with `format=:auto` default,
+  - explicit `NamedTuple` specs (path, vocab/merges, encoder/vocab.bpe, tokenizer.json, model_file, encoding_file).
+- Added spec materialization for explicit file-set registration into cache-backed local spec dirs.
+- Persisted richer local metadata in cache TOML:
+  - format, distribution, upstream repo/ref,
+  - resolved files,
+  - optional notes.
+- Added richer `describe_model(...)` fields for local entries:
+  - `resolved_files`
+  - `notes`.
+
+### Tests added/updated for section 13
+- Expanded test suite label to `KeemenaSubwords sections 1-13`.
+- Added fixtures:
+  - `test/fixtures/bpe_encoder/{encoder.json,vocab.bpe}`
+  - `test/fixtures/tiktoken_model/tokenizer.model`
+  - `test/fixtures/sentencepiece/binary_stub.model`
+- Added section-13 tests for:
+  - `detect_tokenizer_format` and `detect_tokenizer_files` behavior,
+  - `.model` tiktoken vs sentencepiece sniffing,
+  - explicit loaders (`load_bpe_gpt2`, `load_bpe_encoder`, `load_tiktoken`),
+  - error message quality for missing required files,
+  - `register_local_model!` with auto path and explicit NamedTuple spec,
+  - format override behavior.
+
+### Verification
+- Ran: `julia --project=. tools/sync_readme_models.jl`
+  - Result: docs inventory section regenerated.
+- Ran: `julia --project=. tools/sync_readme_models.jl --check`
+  - Result: docs inventory sync check passed.
+- Ran: `julia --project=. -e 'using Pkg; Pkg.test()'`
+  - Result: `194/194` tests passed (`KeemenaSubwords sections 1-13`).
+- Ran: `julia --project=docs docs/make.jl`
+  - Result: docs build successful.
+
+### Notes
+- Full model inventory remains generated from registry metadata on docs side.
+- README is intentionally concise and links to docs for operational detail.
+- Existing public APIs remain available; explicit convenience loaders were added without removing previous entry points.

@@ -20,6 +20,12 @@ function load_tiktoken(
     model_name::Union{Nothing,AbstractString}=nothing,
 )::TiktokenTokenizer
     model_path = _resolve_tiktoken_path(path)
+    sample = _sample_file_bytes(model_path)
+    _looks_tiktoken_text_payload(sample) || throw(ArgumentError(
+        "Invalid tiktoken file format at $model_path. " *
+        "Expected line format '<base64_bytes> <rank>'. " *
+        "Example: load_tiktoken(\"/path/to/encoding.tiktoken\")",
+    ))
     ranked_tokens = _read_tiktoken_file(model_path)
     id_to_bytes = [item.bytes for item in ranked_tokens]
     id_to_rank = [item.rank for item in ranked_tokens]
@@ -171,12 +177,37 @@ eos_id(tokenizer::TiktokenTokenizer)::Union{Int,Nothing} = nothing
 
 function _resolve_tiktoken_path(path::AbstractString)::String
     if isdir(path)
-        candidates = filter(p -> endswith(lowercase(p), ".tiktoken"), readdir(path; join=true))
-        length(candidates) == 1 || throw(ArgumentError("Expected exactly one .tiktoken file in directory: $path"))
-        return String(candidates[1])
+        files = detect_tokenizer_files(path)
+        if length(files.tiktoken_files) == 1
+            return String(files.tiktoken_files[1])
+        end
+
+        model_candidate = joinpath(String(path), "tokenizer.model")
+        if isfile(model_candidate) && _looks_tiktoken_text_payload(_sample_file_bytes(model_candidate))
+            return model_candidate
+        end
+
+        throw(ArgumentError(
+            "Expected one tiktoken file in directory: $path. " *
+            "Provide exactly one *.tiktoken file, or tokenizer.model containing tiktoken text. " *
+            "Example: load_tiktoken(\"/path/to/tokenizer.model\")",
+        ))
     end
 
-    isfile(path) || throw(ArgumentError("Tiktoken file not found: $path"))
+    isfile(path) || throw(ArgumentError(
+        "Tiktoken file not found: $path. " *
+        "Example: load_tiktoken(\"/path/to/encoding.tiktoken\")",
+    ))
+
+    lower = lowercase(String(path))
+    if endswith(lower, ".tiktoken")
+        return String(path)
+    end
+
+    _looks_tiktoken_text_payload(_sample_file_bytes(path)) || throw(ArgumentError(
+        "Tiktoken path does not look like a valid tiktoken file: $path. " *
+        "Expected .tiktoken or text tokenizer.model content.",
+    ))
     return String(path)
 end
 

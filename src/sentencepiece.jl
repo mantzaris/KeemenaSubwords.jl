@@ -14,12 +14,32 @@ Supported model file format in this package is a lightweight text form:
 """
 function load_sentencepiece(
     path::AbstractString;
+    kind::Symbol=:auto,
     model_name::Union{Nothing,AbstractString}=nothing,
 )::SentencePieceTokenizer
     model_path = _resolve_sentencepiece_model_path(path)
 
+    kind in (:auto, :unigram, :bpe) || throw(ArgumentError(
+        "Unsupported SentencePiece kind=$kind. Expected :auto, :unigram, or :bpe.",
+    ))
+
+    lower_model_path = lowercase(model_path)
+    if (endswith(lower_model_path, ".model") || endswith(lower_model_path, ".model.v3")) &&
+       _looks_tiktoken_text_payload(_sample_file_bytes(model_path))
+        throw(ArgumentError(
+            "File appears to be tiktoken text, not a SentencePiece model: $model_path. " *
+            "Example: load_tiktoken(\"$model_path\") or load_tokenizer(\"$model_path\"; format=:tiktoken)",
+        ))
+    end
+
     parsed = _read_sentencepiece_model(model_path)
     mtype = parsed.model_type
+    if kind == :unigram && mtype != :unigram
+        throw(ArgumentError("SentencePiece model at $model_path is type=$mtype, not :unigram"))
+    elseif kind == :bpe && mtype != :bpe
+        throw(ArgumentError("SentencePiece model at $model_path is type=$mtype, not :bpe"))
+    end
+
     marker = parsed.whitespace_marker
     unk = parsed.unk_token
 
@@ -52,16 +72,23 @@ end
 function _resolve_sentencepiece_model_path(path::AbstractString)::String
     if isdir(path)
         candidates = String[]
-        for filename in ("spm.model", "tokenizer.model", "tokenizer.model.v3", "sentencepiece.bpe.model")
+        for filename in ("spm.model", "spiece.model", "tokenizer.model", "tokenizer.model.v3", "sentencepiece.bpe.model")
             candidate = joinpath(path, filename)
             isfile(candidate) && push!(candidates, candidate)
         end
 
-        isempty(candidates) && throw(ArgumentError("No supported SentencePiece model file found in directory: $path"))
+        isempty(candidates) && throw(ArgumentError(
+            "No supported SentencePiece model file found in directory: $path. " *
+            "Expected one of spm.model, spiece.model, tokenizer.model, tokenizer.model.v3, sentencepiece.bpe.model. " *
+            "Example: load_sentencepiece(\"/path/to/tokenizer.model\")",
+        ))
         return candidates[1]
     end
 
-    isfile(path) || throw(ArgumentError("SentencePiece model path does not exist: $path"))
+    isfile(path) || throw(ArgumentError(
+        "SentencePiece model path does not exist: $path. " *
+        "Example: load_sentencepiece(\"/path/to/tokenizer.model\")",
+    ))
     return String(path)
 end
 

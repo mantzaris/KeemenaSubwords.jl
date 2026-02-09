@@ -22,6 +22,11 @@ makedocs(
         "Home"          => "index.md",
         "Integration"   => "integration.md",
         "Loading"       => "loading.md",
+        "Formats"       => "formats.md",
+        "Loading Local" => "loading_local.md",
+        "LLM Cookbook"  => "llm_cookbook.md",
+        "Gated Models"  => "gated_models.md",
+        "Troubleshooting" => "troubleshooting.md",
         "Built-In Models" => "models.md",
     ],
 )

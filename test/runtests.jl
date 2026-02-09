@@ -4,7 +4,7 @@ using KeemenaSubwords
 const FIXTURES_DIR = joinpath(@__DIR__, "fixtures")
 fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
 
-@testset "KeemenaSubwords sections 1-12" begin
+@testset "KeemenaSubwords sections 1-13" begin
     @testset "Model registry" begin
         names = available_models()
         @test :core_bpe_en in names
@@ -358,6 +358,92 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
         end
         @test err2 isa ArgumentError
         @test occursin("gated", lowercase(sprint(showerror, err2)))
+    end
+
+    @testset "Section 13 loader contracts and detection" begin
+        @test detect_tokenizer_format(fixture("hf_json_wordpiece")) == :hf_tokenizer_json
+        @test detect_tokenizer_format(fixture("bpe_gpt2")) == :bpe_gpt2
+        @test detect_tokenizer_format(fixture("bpe_encoder")) == :bpe_encoder
+        @test detect_tokenizer_format(fixture("sentencepiece", "toy_bpe.model")) == :sentencepiece_model
+        @test detect_tokenizer_format(fixture("sentencepiece", "binary_stub.model")) == :sentencepiece_model
+        @test detect_tokenizer_format(fixture("tiktoken_model", "tokenizer.model")) == :tiktoken
+
+        files = detect_tokenizer_files(fixture("hf_json_wordpiece"))
+        @test files.tokenizer_json !== nothing
+        @test files.vocab_json === nothing
+
+        gpt2 = load_bpe_gpt2(
+            fixture("bpe_gpt2", "vocab.json"),
+            fixture("bpe_gpt2", "merges.txt"),
+        )
+        @test gpt2 isa ByteBPETokenizer
+        @test !isempty(tokenize(gpt2, "hello world"))
+
+        enc = load_bpe_encoder(
+            fixture("bpe_encoder", "encoder.json"),
+            fixture("bpe_encoder", "vocab.bpe"),
+        )
+        @test enc isa ByteBPETokenizer
+        @test !isempty(tokenize(enc, "hello world"))
+
+        @test load_tiktoken(fixture("tiktoken_model", "tokenizer.model")) isa TiktokenTokenizer
+        auto_tiktoken = load_tokenizer(fixture("tiktoken_model", "tokenizer.model"))
+        @test auto_tiktoken isa TiktokenTokenizer
+
+        msg = try
+            load_bpe_gpt2(fixture("bpe_gpt2", "vocab.json"), fixture("bpe_gpt2", "missing.txt"))
+            nothing
+        catch ex
+            sprint(showerror, ex)
+        end
+        @test msg isa String
+        @test occursin("Expected files", msg)
+        @test occursin("load_bpe_gpt2", msg)
+
+        msg2 = try
+            load_tokenizer(fixture("tiktoken_model", "tokenizer.model"); format=:sentencepiece_model)
+            nothing
+        catch ex
+            sprint(showerror, ex)
+        end
+        @test msg2 isa String
+        @test occursin("tiktoken", lowercase(msg2))
+
+        msg3 = try
+            load_tokenizer(fixture("sentencepiece", "toy_bpe.model"); format=:tiktoken)
+            nothing
+        catch ex
+            sprint(showerror, ex)
+        end
+        @test msg3 isa String
+        @test occursin("tiktoken", lowercase(msg3))
+
+        local_auto = :local_auto_wordpiece
+        register_local_model!(
+            local_auto,
+            fixture("wordpiece");
+            format=:auto,
+            description="Auto-detected local wordpiece",
+        )
+        @test load_tokenizer(local_auto; prefetch=false) isa WordPieceTokenizer
+
+        local_spec = :local_spec_bpe
+        register_local_model!(
+            local_spec,
+            (
+                format=:bpe_gpt2,
+                vocab_json=fixture("bpe_gpt2", "vocab.json"),
+                merges_txt=fixture("bpe_gpt2", "merges.txt"),
+            );
+            description="Spec-registered local bpe model",
+            family=:local,
+            notes="section13-spec",
+        )
+        spec_tok = load_tokenizer(local_spec; prefetch=false)
+        @test spec_tok isa ByteBPETokenizer
+        spec_info = describe_model(local_spec)
+        @test !isempty(spec_info.resolved_files)
+        @test occursin("section13-spec", spec_info.notes)
     end
 
     @testset "Section 4 integration helpers" begin

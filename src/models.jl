@@ -12,6 +12,8 @@ const _CACHE_ROOT = normpath(get(ENV, "KEEMENA_SUBWORDS_CACHE_DIR", _DEFAULT_CAC
 const _LOCAL_MODELS_TOML = joinpath(_CACHE_ROOT, "local_models.toml")
 const _LOCAL_MODELS_LOADED = Ref(false)
 const _PERSISTED_LOCAL_KEYS = Set{Symbol}()
+const _LOCAL_MODEL_RESOLVED_FILES = Dict{Symbol,Vector{String}}()
+const _LOCAL_MODEL_NOTES = Dict{Symbol,String}()
 const _UPSTREAM_FILE_INFO = NamedTuple{(:relative_path, :url, :sha256),Tuple{String,String,Union{Nothing,String}}}
 const _VALID_MODEL_DISTRIBUTIONS = Set{Symbol}((
     :shipped,
@@ -513,35 +515,196 @@ function _register_model_entry!(
     return nothing
 end
 
+function _canonical_registry_format(format::Symbol)::Symbol
+    if format in (:wordpiece, :wordpiece_vocab)
+        return :wordpiece_vocab
+    elseif format in (:sentencepiece, :sentencepiece_model)
+        return :sentencepiece_model
+    elseif format in (:bpe_encoder, :bpe_gpt2)
+        return :bpe_gpt2
+    elseif format in (:bpe, :bytebpe, :tiktoken, :hf_tokenizer_json, :unigram)
+        return format
+    end
+    throw(ArgumentError("Unsupported tokenizer format for model registration: $format"))
+end
+
+_local_family_symbol(family::Nothing) = :local
+_local_family_symbol(family::Symbol) = family
+
+function _copy_local_spec_file!(
+    source::AbstractString,
+    target_dir::AbstractString,
+    target_name::AbstractString,
+)::String
+    source_path = normpath(String(source))
+    isfile(source_path) || throw(ArgumentError("Local model file does not exist: $source_path"))
+    mkpath(target_dir)
+    target_path = joinpath(target_dir, String(target_name))
+    cp(source_path, target_path; force=true)
+    return target_path
+end
+
+function _materialize_local_spec!(
+    key::Symbol,
+    spec::NamedTuple,
+    default_format::Symbol,
+)::Tuple{String,Symbol,Vector{String}}
+    if haskey(spec, :path)
+        path = normpath(String(spec[:path]))
+        ispath(path) || throw(ArgumentError("Local model path does not exist: $path"))
+        fmt = default_format === :auto ? detect_tokenizer_format(path) : default_format
+        return (path, _canonical_registry_format(fmt), String[])
+    end
+
+    local_spec_dir = joinpath(_CACHE_ROOT, "local_specs", String(key))
+    resolved_files = String[]
+
+    if haskey(spec, :vocab) && haskey(spec, :merges)
+        vocab = String(spec[:vocab])
+        merges = String(spec[:merges])
+        fmt = default_format === :auto ? :bpe_gpt2 : default_format
+        canonical = _canonical_registry_format(fmt)
+
+        if canonical == :bpe_gpt2
+            vocab_name = lowercase(basename(vocab)) == "encoder.json" ? "encoder.json" : "vocab.json"
+            merges_name = lowercase(basename(merges)) == "vocab.bpe" ? "vocab.bpe" : "merges.txt"
+            push!(resolved_files, _copy_local_spec_file!(vocab, local_spec_dir, vocab_name))
+            push!(resolved_files, _copy_local_spec_file!(merges, local_spec_dir, merges_name))
+        else
+            push!(resolved_files, _copy_local_spec_file!(vocab, local_spec_dir, "vocab.txt"))
+            push!(resolved_files, _copy_local_spec_file!(merges, local_spec_dir, "merges.txt"))
+        end
+        return (local_spec_dir, canonical, resolved_files)
+    end
+
+    if haskey(spec, :encoder_json) && haskey(spec, :vocab_bpe)
+        push!(resolved_files, _copy_local_spec_file!(String(spec[:encoder_json]), local_spec_dir, "encoder.json"))
+        push!(resolved_files, _copy_local_spec_file!(String(spec[:vocab_bpe]), local_spec_dir, "vocab.bpe"))
+        return (local_spec_dir, :bpe_gpt2, resolved_files)
+    end
+
+    if haskey(spec, :vocab_json) && haskey(spec, :merges_txt)
+        push!(resolved_files, _copy_local_spec_file!(String(spec[:vocab_json]), local_spec_dir, "vocab.json"))
+        push!(resolved_files, _copy_local_spec_file!(String(spec[:merges_txt]), local_spec_dir, "merges.txt"))
+        return (local_spec_dir, :bpe_gpt2, resolved_files)
+    end
+
+    if haskey(spec, :vocab_txt)
+        push!(resolved_files, _copy_local_spec_file!(String(spec[:vocab_txt]), local_spec_dir, "vocab.txt"))
+        return (local_spec_dir, :wordpiece_vocab, resolved_files)
+    end
+
+    if haskey(spec, :tokenizer_json)
+        push!(resolved_files, _copy_local_spec_file!(String(spec[:tokenizer_json]), local_spec_dir, "tokenizer.json"))
+        if haskey(spec, :tokenizer_config_json)
+            push!(resolved_files, _copy_local_spec_file!(String(spec[:tokenizer_config_json]), local_spec_dir, "tokenizer_config.json"))
+        end
+        if haskey(spec, :special_tokens_map_json)
+            push!(resolved_files, _copy_local_spec_file!(String(spec[:special_tokens_map_json]), local_spec_dir, "special_tokens_map.json"))
+        end
+        return (local_spec_dir, :hf_tokenizer_json, resolved_files)
+    end
+
+    if haskey(spec, :model_file)
+        source = String(spec[:model_file])
+        target_name = endswith(lowercase(source), ".model.v3") ? "tokenizer.model.v3" : "tokenizer.model"
+        push!(resolved_files, _copy_local_spec_file!(source, local_spec_dir, target_name))
+        return (local_spec_dir, :sentencepiece_model, resolved_files)
+    end
+
+    if haskey(spec, :encoding_file)
+        source = String(spec[:encoding_file])
+        target_name = endswith(lowercase(source), ".tiktoken") ? basename(source) : "tokenizer.tiktoken"
+        push!(resolved_files, _copy_local_spec_file!(source, local_spec_dir, target_name))
+        return (local_spec_dir, :tiktoken, resolved_files)
+    end
+
+    throw(ArgumentError(
+        "Unsupported local model spec for $key. Supported NamedTuple keys include " *
+        "(:path), (:vocab,:merges), (:encoder_json,:vocab_bpe), (:vocab_json,:merges_txt), " *
+        "(:vocab_txt), (:tokenizer_json), (:model_file), (:encoding_file).",
+    ))
+end
+
 """
 Register a local tokenizer path under a symbolic key and persist it in the cache registry.
 """
 function register_local_model!(
     key::Symbol,
     path_or_dir::AbstractString;
-    format::Symbol,
+    format::Symbol=:auto,
     description::AbstractString="User-supplied local tokenizer",
-    family::Symbol=:local,
+    family::Union{Nothing,Symbol}=nothing,
     license::AbstractString="external-user-supplied",
     upstream_repo::AbstractString="user-supplied",
     upstream_ref::AbstractString="user-supplied",
     distribution::Symbol=:user_local,
     upstream_files::Vector{_UPSTREAM_FILE_INFO}=Vector{_UPSTREAM_FILE_INFO}(),
+    notes::AbstractString="",
 )::Nothing
     _ensure_local_models_loaded()
+    path = normpath(String(path_or_dir))
+    ispath(path) || throw(ArgumentError("Local model path does not exist: $path"))
+    detected_format = format === :auto ? detect_tokenizer_format(path) : format
+    canonical_format = _canonical_registry_format(detected_format)
+    family_symbol = _local_family_symbol(family)
+
     _register_model_entry!(
         key,
-        path_or_dir;
-        format=format,
+        path;
+        format=canonical_format,
         description=description,
-        family=family,
+        family=family_symbol,
         license=license,
         upstream_repo=upstream_repo,
         upstream_ref=upstream_ref,
         distribution=distribution,
         upstream_files=upstream_files,
-        persist=true,
+        persist=false,
     )
+    _LOCAL_MODEL_RESOLVED_FILES[key] = _resolved_model_files(_MODEL_REGISTRY[key], path)
+    isempty(notes) || (_LOCAL_MODEL_NOTES[key] = String(notes))
+    push!(_PERSISTED_LOCAL_KEYS, key)
+    _write_local_models_registry()
+    return nothing
+end
+
+"""
+Register local model files by explicit specification.
+"""
+function register_local_model!(
+    key::Symbol,
+    spec::NamedTuple;
+    format::Symbol=:auto,
+    description::AbstractString="User-supplied local tokenizer",
+    family::Union{Nothing,Symbol}=nothing,
+    license::AbstractString="external-user-supplied",
+    upstream_repo::AbstractString="user-supplied",
+    upstream_ref::AbstractString="user-supplied",
+    distribution::Symbol=:user_local,
+    notes::AbstractString="",
+)::Nothing
+    _ensure_local_models_loaded()
+    default_format = haskey(spec, :format) ? Symbol(spec[:format]) : format
+    path, canonical_format, resolved_files = _materialize_local_spec!(key, spec, default_format)
+    family_symbol = _local_family_symbol(family)
+
+    _register_model_entry!(
+        key,
+        path;
+        format=canonical_format,
+        description=description,
+        family=family_symbol,
+        license=license,
+        upstream_repo=upstream_repo,
+        upstream_ref=upstream_ref,
+        distribution=distribution,
+        persist=false,
+    )
+    _LOCAL_MODEL_RESOLVED_FILES[key] = isempty(resolved_files) ? _resolved_model_files(_MODEL_REGISTRY[key], path) : resolved_files
+    isempty(notes) || (_LOCAL_MODEL_NOTES[key] = String(notes))
+    push!(_PERSISTED_LOCAL_KEYS, key)
+    _write_local_models_registry()
     return nothing
 end
 
@@ -551,7 +714,7 @@ Deprecated alias kept for compatibility. Use `register_local_model!` instead.
 function register_external_model!(
     key::Symbol,
     path::AbstractString;
-    format::Symbol,
+    format::Symbol=:auto,
     description::AbstractString="User-supplied external tokenizer",
     family::Symbol=:external,
     license::AbstractString="external-user-supplied",
@@ -562,11 +725,15 @@ function register_external_model!(
         "register_external_model! is deprecated; use register_local_model! instead.",
         :register_external_model!,
     )
-    _ensure_local_models_loaded()
+    resolved_path = normpath(String(path))
+    ispath(resolved_path) || throw(ArgumentError("Local model path does not exist: $resolved_path"))
+    detected_format = format === :auto ? detect_tokenizer_format(resolved_path) : format
+    canonical_format = _canonical_registry_format(detected_format)
+
     _register_model_entry!(
         key,
-        path;
-        format=format,
+        resolved_path;
+        format=canonical_format,
         description=description,
         family=family,
         license=license,
@@ -575,6 +742,7 @@ function register_external_model!(
         distribution=:user_local,
         persist=false,
     )
+    _LOCAL_MODEL_RESOLVED_FILES[key] = _resolved_model_files(_MODEL_REGISTRY[key], resolved_path)
     return nothing
 end
 
@@ -737,12 +905,15 @@ function describe_model(name::Symbol)::NamedTuple
     upstream = get(_MODEL_UPSTREAM_FILES, name, Vector{_UPSTREAM_FILE_INFO}())
     files = _resolved_model_files(entry, resolved)
     exists = !isempty(files) && all(ispath, files)
+    resolved_files = get(_LOCAL_MODEL_RESOLVED_FILES, name, files)
+    notes = get(_LOCAL_MODEL_NOTES, name, "")
 
     return (
         name = name,
         format = entry.format,
         path = resolved,
         files = files,
+        resolved_files = resolved_files,
         expected_files = _expected_model_files(entry),
         exists = exists,
         source = source,
@@ -756,14 +927,19 @@ function describe_model(name::Symbol)::NamedTuple
         artifact_name = entry.artifact_name,
         upstream_files = upstream,
         provenance_urls = [f.url for f in upstream],
+        notes = notes,
     )
 end
 
 function _matches_format(model_format::Symbol, query_format::Symbol)::Bool
     if model_format == query_format
         return true
+    elseif query_format == :bpe_encoder
+        return model_format in (:bpe_gpt2, :hf_tokenizer_json)
     elseif query_format == :wordpiece
         return model_format in (:wordpiece, :wordpiece_vocab)
+    elseif query_format == :sentencepiece_model
+        return model_format in (:sentencepiece, :sentencepiece_model)
     elseif query_format == :sentencepiece
         return model_format in (:sentencepiece, :sentencepiece_model)
     elseif query_format == :bpe_gpt2
@@ -883,6 +1059,12 @@ function _resolved_model_files(entry::BuiltinModelEntry, resolved::String)::Vect
     elseif entry.format == :tiktoken
         if isdir(resolved)
             matches = filter(p -> endswith(lowercase(p), ".tiktoken"), readdir(resolved; join=true))
+            if !isempty(matches)
+                return String[matches...]
+            end
+
+            fallback = joinpath(resolved, "tokenizer.model")
+            isfile(fallback) && return String[fallback]
             return String[matches...]
         end
         return String[resolved]
@@ -923,7 +1105,7 @@ function _expected_model_files(entry::BuiltinModelEntry)::Vector{String}
     elseif entry.format in (:sentencepiece, :sentencepiece_model)
         return String["spm.model / tokenizer.model / tokenizer.model.v3 / sentencepiece.bpe.model"]
     elseif entry.format == :tiktoken
-        return String["*.tiktoken"]
+        return String["*.tiktoken or tokenizer.model (tiktoken text)"]
     elseif entry.format == :hf_tokenizer_json
         return String["tokenizer.json (preferred)", "vocab.json + merges.txt (fallback)"]
     end
@@ -964,6 +1146,12 @@ function _ensure_local_models_loaded()::Nothing
         upstream_ref = String(get(entry_any, "upstream_ref", "user-supplied"))
         distribution = Symbol(String(get(entry_any, "distribution", "user_local")))
         distribution in _VALID_MODEL_DISTRIBUTIONS || (distribution = :user_local)
+        notes = String(get(entry_any, "notes", ""))
+        resolved_files_raw = get(entry_any, "resolved_files", String[])
+        resolved_files = String[]
+        if resolved_files_raw isa AbstractVector
+            append!(resolved_files, [normpath(String(p)) for p in resolved_files_raw])
+        end
 
         _register_model_entry!(
             key,
@@ -978,6 +1166,10 @@ function _ensure_local_models_loaded()::Nothing
             persist=false,
         )
 
+        _LOCAL_MODEL_RESOLVED_FILES[key] = isempty(resolved_files) ?
+            _resolved_model_files(_MODEL_REGISTRY[key], normpath(String(path))) :
+            resolved_files
+        isempty(notes) || (_LOCAL_MODEL_NOTES[key] = notes)
         push!(_PERSISTED_LOCAL_KEYS, key)
     end
 
@@ -1000,6 +1192,8 @@ function _write_local_models_registry()::Nothing
             "license" => entry.license,
             "upstream_repo" => entry.upstream_repo,
             "upstream_ref" => entry.upstream_ref,
+            "resolved_files" => get(_LOCAL_MODEL_RESOLVED_FILES, key, _resolved_model_files(entry, entry.fallback_path)),
+            "notes" => get(_LOCAL_MODEL_NOTES, key, ""),
         )
     end
 

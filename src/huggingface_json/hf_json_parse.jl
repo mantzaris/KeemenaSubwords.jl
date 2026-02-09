@@ -3,11 +3,17 @@ using JSON3
 function _resolve_hf_json_path(path::AbstractString)::String
     if isdir(path)
         candidate = joinpath(path, "tokenizer.json")
-        isfile(candidate) || throw(ArgumentError("No tokenizer.json found in directory: $path"))
+        isfile(candidate) || throw(ArgumentError(
+            "No tokenizer.json found in directory: $path. " *
+            "Expected files: tokenizer.json. Example: load_hf_tokenizer_json(\"/path/to/tokenizer.json\")",
+        ))
         return candidate
     end
 
-    isfile(path) || throw(ArgumentError("tokenizer.json path does not exist: $path"))
+    isfile(path) || throw(ArgumentError(
+        "tokenizer.json path does not exist: $path. " *
+        "Example: load_hf_tokenizer_json(\"/path/to/tokenizer.json\")",
+    ))
     return String(path)
 end
 

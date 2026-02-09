@@ -147,11 +147,22 @@ eos_id(tokenizer::WordPieceTokenizer)::Union{Int,Nothing} = eos_id(tokenizer.voc
 function _wordpiece_vocab_path(path::AbstractString)::String
     if isdir(path)
         candidate = joinpath(path, "vocab.txt")
-        isfile(candidate) || throw(ArgumentError("No vocab.txt found in directory: $path"))
+        isfile(candidate) || throw(ArgumentError(
+            "No vocab.txt found in directory: $path. " *
+            "Expected files: vocab.txt. Example: load_wordpiece(\"/path/to/vocab.txt\")",
+        ))
         return candidate
     end
 
-    isfile(path) || throw(ArgumentError("WordPiece vocab file not found: $path"))
+    isfile(path) || throw(ArgumentError(
+        "WordPiece vocab file not found: $path. " *
+        "Expected files: vocab.txt. Example: load_wordpiece(\"/path/to/vocab.txt\")",
+    ))
+    lower_name = lowercase(basename(path))
+    lower_name == "vocab.txt" || endswith(lower_name, ".txt") || throw(ArgumentError(
+        "WordPiece expects a text vocabulary file (typically vocab.txt): $path. " *
+        "Example: load_wordpiece(\"/path/to/vocab.txt\")",
+    ))
     return String(path)
 end
 

@@ -2,7 +2,6 @@
 
 using KeemenaSubwords
 
-const README_PATH = normpath(joinpath(@__DIR__, "..", "README.md"))
 const DOCS_MODELS_PATH = normpath(joinpath(@__DIR__, "..", "docs", "src", "models.md"))
 const START_MARKER = "<!-- KEEMENA_MODELS_START -->"
 const END_MARKER = "<!-- KEEMENA_MODELS_END -->"
@@ -76,7 +75,7 @@ end
 function _replace_marked_section(path::AbstractString, content::AbstractString; check::Bool)::Bool
     text = read(path, String)
     pattern = Regex("(?s)" * _regex_escape(START_MARKER) * ".*?" * _regex_escape(END_MARKER))
-    occursin(pattern, text) || throw(ArgumentError("Missing README/docs markers in $(path): $(START_MARKER) ... $(END_MARKER)"))
+    occursin(pattern, text) || throw(ArgumentError("Missing docs markers in $(path): $(START_MARKER) ... $(END_MARKER)"))
 
     replacement = string(START_MARKER, "\n", content, "\n", END_MARKER)
     updated = replace(text, pattern => replacement)
@@ -98,22 +97,20 @@ function main()::Nothing
     content = _render_inventory_table()
 
     if check_mode
-        ok_readme = _replace_marked_section(README_PATH, content; check=true)
         ok_docs = _replace_marked_section(DOCS_MODELS_PATH, content; check=true)
-        if ok_readme && ok_docs
-            println("README/docs model inventory is in sync.")
+        if ok_docs
+            println("Docs model inventory is in sync.")
             return nothing
         end
         error("Model inventory is out of sync. Run: julia --project=. tools/sync_readme_models.jl")
     end
 
-    changed_readme = _replace_marked_section(README_PATH, content; check=false)
     changed_docs = _replace_marked_section(DOCS_MODELS_PATH, content; check=false)
 
-    if changed_readme || changed_docs
-        println("Updated model inventory sections in README/docs.")
+    if changed_docs
+        println("Updated model inventory section in docs.")
     else
-        println("README/docs model inventory already up to date.")
+        println("Docs model inventory already up to date.")
     end
 
     return nothing

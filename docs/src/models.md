@@ -109,10 +109,10 @@ _Generated from the registry by `tools/sync_readme_models.jl` (excluding `:user_
 
 | Key | Distribution | License | Upstream Repo | Upstream Ref | Expected Files | Description |
 | --- | --- | --- | --- | --- | --- | --- |
-| `:tiktoken_cl100k_base` | `artifact_public` | `MIT` | `openaipublic/encodings` | `openaipublic:encodings/cl100k_base.tiktoken` | *.tiktoken | OpenAI tiktoken cl100k_base encoding. |
-| `:tiktoken_o200k_base` | `artifact_public` | `MIT` | `openaipublic/encodings` | `openaipublic:encodings/o200k_base.tiktoken` | *.tiktoken | OpenAI tiktoken o200k_base encoding. |
-| `:tiktoken_p50k_base` | `artifact_public` | `MIT` | `openaipublic/encodings` | `openaipublic:encodings/p50k_base.tiktoken` | *.tiktoken | OpenAI tiktoken p50k_base encoding. |
-| `:tiktoken_r50k_base` | `artifact_public` | `MIT` | `openaipublic/encodings` | `openaipublic:encodings/r50k_base.tiktoken` | *.tiktoken | OpenAI tiktoken r50k_base encoding. |
+| `:tiktoken_cl100k_base` | `artifact_public` | `MIT` | `openaipublic/encodings` | `openaipublic:encodings/cl100k_base.tiktoken` | *.tiktoken or tokenizer.model (tiktoken text) | OpenAI tiktoken cl100k_base encoding. |
+| `:tiktoken_o200k_base` | `artifact_public` | `MIT` | `openaipublic/encodings` | `openaipublic:encodings/o200k_base.tiktoken` | *.tiktoken or tokenizer.model (tiktoken text) | OpenAI tiktoken o200k_base encoding. |
+| `:tiktoken_p50k_base` | `artifact_public` | `MIT` | `openaipublic/encodings` | `openaipublic:encodings/p50k_base.tiktoken` | *.tiktoken or tokenizer.model (tiktoken text) | OpenAI tiktoken p50k_base encoding. |
+| `:tiktoken_r50k_base` | `artifact_public` | `MIT` | `openaipublic/encodings` | `openaipublic:encodings/r50k_base.tiktoken` | *.tiktoken or tokenizer.model (tiktoken text) | OpenAI tiktoken r50k_base encoding. |
 
 ### `wordpiece_vocab` / `bert`
 
