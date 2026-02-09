@@ -11,12 +11,21 @@ Implemented core scope from plan sections 1-3:
 - Byte-level BPE (GPT-2 style byte mapping)
 - WordPiece
 - Unigram LM
-- SentencePiece `.model` compatibility wrapper (Unigram + BPE lightweight format)
+- SentencePiece `.model` compatibility wrapper (lightweight text + protobuf unigram loading)
 
 Built-in core models:
 - `:core_bpe_en`
 - `:core_wordpiece_en`
 - `:core_sentencepiece_unigram_en`
+
+Additional built-in public baseline keys:
+- `:tiktoken_o200k_base`
+- `:tiktoken_cl100k_base`
+- `:tiktoken_r50k_base`
+- `:tiktoken_p50k_base`
+- `:openai_gpt2_bpe`
+- `:bert_base_uncased_wordpiece`
+- `:t5_small_sentencepiece_unigram`
 
 ## Installation
 
@@ -32,10 +41,12 @@ using KeemenaSubwords
 bpe = load_tokenizer(:core_bpe_en)
 wp = load_tokenizer(:core_wordpiece_en)
 sp = load_tokenizer(:core_sentencepiece_unigram_en)
+tiktoken = load_tokenizer(:tiktoken_cl100k_base)
 
 tokenize(bpe, "hello world")
 tokenize(wp, "hello keemena subwords")
 tokenize(sp, "hello world")
+decode(tiktoken, encode(tiktoken, "hello world"))
 ```
 
 ## Loading options
@@ -44,14 +55,35 @@ tokenize(sp, "hello world")
 # model registry
 available_models()
 describe_model(:core_bpe_en)
+describe_model(:tiktoken_cl100k_base)
 
 # path loading
 load_tokenizer("/path/to/model_dir")
 load_tokenizer("/path/to/spm.model")
+load_tokenizer("/path/to/o200k_base.tiktoken")
 
 # explicit BPE paths
 load_tokenizer(("/path/to/vocab.txt", "/path/to/merges.txt"))
 ```
+
+## Prefetch built-ins for offline use
+
+`load_tokenizer(:model_key)` resolves files from artifacts first, then in-repo fallback paths.
+
+```julia
+using KeemenaSubwords
+
+status = prefetch_models([
+    :tiktoken_o200k_base,
+    :tiktoken_cl100k_base,
+    :openai_gpt2_bpe,
+    :bert_base_uncased_wordpiece,
+    :t5_small_sentencepiece_unigram,
+])
+```
+
+Artifact build helper for maintainers:
+- `julia --project=. tools/build_public_model_artifact.jl`
 
 ## KeemenaPreprocessing integration
 
@@ -81,9 +113,9 @@ export_tokenizer(bpe, "out/gpt2_style"; format=:bpe_gpt2)
 
 ## Training entrypoints
 
-The API surface exists for forward compatibility:
+Implemented baseline trainers:
 - `train_bpe(...)`
 - `train_unigram(...)`
-- `train_wordpiece(...)`
 
-These methods currently raise `ArgumentError` (not implemented yet).
+Planned later:
+- `train_wordpiece(...)` (currently raises `ArgumentError`)

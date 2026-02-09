@@ -1,0 +1,11 @@
+# tiny fallback for :t5_small_sentencepiece_unigram
+type=unigram
+whitespace_marker=▁
+unk_token=<unk>
+piece	<pad>	-0.10	pad
+piece	</s>	-0.20	eos
+piece	<unk>	-99.0	unk
+piece	▁hello	-0.30
+piece	▁world	-0.35
+piece	▁keemena	-0.40
+piece	▁subwords	-0.45

@@ -4,17 +4,27 @@ using KeemenaSubwords
 const FIXTURES_DIR = joinpath(@__DIR__, "fixtures")
 fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
 
-@testset "KeemenaSubwords sections 1-7" begin
+@testset "KeemenaSubwords sections 1-9" begin
     @testset "Model registry" begin
         names = available_models()
         @test :core_bpe_en in names
         @test :core_wordpiece_en in names
         @test :core_sentencepiece_unigram_en in names
+        @test :tiktoken_o200k_base in names
+        @test :tiktoken_cl100k_base in names
+        @test :openai_gpt2_bpe in names
+        @test :bert_base_uncased_wordpiece in names
+        @test :t5_small_sentencepiece_unigram in names
 
         info = describe_model(:core_bpe_en)
         @test info.format == :bpe
         @test info.exists
         @test isdir(model_path(:core_bpe_en))
+
+        gpt2_info = describe_model(:openai_gpt2_bpe)
+        @test gpt2_info.format == :bpe_gpt2
+        @test length(gpt2_info.files) == 2
+        @test all(isabspath, gpt2_info.files)
     end
 
     @testset "Classic BPE core model" begin
@@ -135,6 +145,44 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
         @test gpt2_explicit isa ByteBPETokenizer
 
         @test_throws ArgumentError load_tokenizer(fixture("internal", "tokenizer.json"); format=:auto)
+    end
+
+    @testset "Section 9 built-in public baseline keys" begin
+        availability = prefetch_models([
+            :tiktoken_o200k_base,
+            :tiktoken_cl100k_base,
+            :openai_gpt2_bpe,
+            :bert_base_uncased_wordpiece,
+            :t5_small_sentencepiece_unigram,
+        ])
+        @test all(values(availability))
+
+        for key in (
+            :tiktoken_o200k_base,
+            :tiktoken_cl100k_base,
+            :tiktoken_r50k_base,
+            :tiktoken_p50k_base,
+        )
+            tt = load_tokenizer(key)
+            @test tt isa TiktokenTokenizer
+            ids = encode(tt, "hello world")
+            @test !isempty(ids)
+            @test decode(tt, ids) == "hello world"
+            @test !isempty(tokenize(tt, "hello world"))
+        end
+
+        gpt2 = load_tokenizer(:openai_gpt2_bpe)
+        @test gpt2 isa ByteBPETokenizer
+        gpt2_roundtrip = decode(gpt2, encode(gpt2, "hello world"))
+        @test replace(gpt2_roundtrip, " " => "") == "helloworld"
+
+        bert = load_tokenizer(:bert_base_uncased_wordpiece)
+        @test bert isa WordPieceTokenizer
+        @test !isempty(tokenize(bert, "hello keemena"))
+
+        t5 = load_tokenizer(:t5_small_sentencepiece_unigram)
+        @test t5 isa SentencePieceTokenizer
+        @test !isempty(tokenize(t5, "hello world"))
     end
 
     @testset "Section 4 integration helpers" begin

@@ -35,6 +35,23 @@ available_models()
 describe_model(:core_bpe_en)
 describe_model(:core_wordpiece_en)
 describe_model(:core_sentencepiece_unigram_en)
+describe_model(:tiktoken_cl100k_base)
+describe_model(:openai_gpt2_bpe)
+```
+
+Public baseline keys:
+- `:tiktoken_o200k_base`
+- `:tiktoken_cl100k_base`
+- `:tiktoken_r50k_base`
+- `:tiktoken_p50k_base`
+- `:openai_gpt2_bpe`
+- `:bert_base_uncased_wordpiece`
+- `:t5_small_sentencepiece_unigram`
+
+Prefetch artifacts (when available) for offline use:
+
+```julia
+prefetch_models([:tiktoken_cl100k_base, :openai_gpt2_bpe])
 ```
 
 ## KeemenaPreprocessing Integration

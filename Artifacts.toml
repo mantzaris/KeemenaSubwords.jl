@@ -1,3 +1,3 @@
-# Placeholder artifact manifest.
-# Core models are currently shipped in-repo under ./models for sections 1-3.
-# Future iterations can move these entries to content-addressed artifacts.
+[keemena_public_tokenizer_assets_v1]
+git-tree-sha1 = "0293c813181ade29e0c88e0e48015f201d89ddeb"
+lazy = true

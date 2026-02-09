@@ -1,7 +1,14 @@
 """
 Load tokenizer by built-in model name.
 """
-function load_tokenizer(name::Symbol; kwargs...)::AbstractSubwordTokenizer
+function load_tokenizer(
+    name::Symbol;
+    prefetch::Bool=true,
+    kwargs...,
+)::AbstractSubwordTokenizer
+    if prefetch
+        prefetch_models([name])
+    end
     info = describe_model(name)
     return load_tokenizer(info.path; format=info.format, model_name=String(name), kwargs...)
 end
@@ -17,6 +24,8 @@ function load_tokenizer(
     resolved = String(path)
     if format === :bpe_gpt2
         return _load_bpe_gpt2(resolved; kwargs...)
+    elseif format === :tiktoken
+        return load_tiktoken(resolved; kwargs...)
     end
     selected_format = format === :auto ? _detect_format(resolved) : _canonical_load_format(format)
 
@@ -32,6 +41,8 @@ function load_tokenizer(
         return load_unigram(resolved; kwargs...)
     elseif selected_format === :sentencepiece
         return load_sentencepiece(resolved; kwargs...)
+    elseif selected_format === :tiktoken
+        return load_tiktoken(resolved; kwargs...)
     elseif selected_format === :internal_json
         throw(ArgumentError("tokenizer.json loading is not implemented yet for this package's internal format"))
     end
@@ -143,6 +154,8 @@ function _canonical_load_format(format::Symbol)::Symbol
         return :unigram
     elseif format in (:sentencepiece, :sentencepiece_model)
         return :sentencepiece
+    elseif format in (:tiktoken,)
+        return :tiktoken
     end
 
     throw(ArgumentError("Unsupported tokenizer format: $format"))
@@ -180,9 +193,12 @@ function _detect_format(path::String)::Symbol
         has_vocab = isfile(joinpath(path, "vocab.txt"))
         has_merges = isfile(joinpath(path, "merges.txt"))
         has_vocab_json = isfile(joinpath(path, "vocab.json"))
+        has_encoder_json = isfile(joinpath(path, "encoder.json"))
+        has_vocab_bpe = isfile(joinpath(path, "vocab.bpe"))
         has_tokenizer_json = isfile(joinpath(path, "tokenizer.json"))
+        tiktoken_files = filter(p -> endswith(lowercase(p), ".tiktoken"), readdir(path; join=true))
 
-        if has_vocab_json && has_merges
+        if (has_vocab_json && has_merges) || (has_encoder_json && has_vocab_bpe)
             return :bpe_gpt2
         elseif has_vocab && has_merges
             return :bpe
@@ -192,6 +208,8 @@ function _detect_format(path::String)::Symbol
             return :unigram
         elseif isfile(joinpath(path, "spm.model"))
             return :sentencepiece
+        elseif length(tiktoken_files) == 1
+            return :tiktoken
         elseif has_tokenizer_json
             return :internal_json
         end
@@ -208,11 +226,21 @@ function _detect_format(path::String)::Symbol
 
     if endswith(lower_path, ".model")
         return :sentencepiece
+    elseif endswith(lower_path, ".tiktoken")
+        return :tiktoken
     elseif lower_name == "tokenizer.json"
         return :internal_json
     elseif lower_name == "vocab.json"
         sibling_merges = joinpath(dirname(path), "merges.txt")
         isfile(sibling_merges) || throw(ArgumentError("Found vocab.json without sibling merges.txt: $path"))
+        return :bpe_gpt2
+    elseif lower_name == "encoder.json"
+        sibling_merges = joinpath(dirname(path), "vocab.bpe")
+        isfile(sibling_merges) || throw(ArgumentError("Found encoder.json without sibling vocab.bpe: $path"))
+        return :bpe_gpt2
+    elseif lower_name == "vocab.bpe"
+        sibling_vocab = joinpath(dirname(path), "encoder.json")
+        isfile(sibling_vocab) || throw(ArgumentError("Found vocab.bpe without sibling encoder.json: $path"))
         return :bpe_gpt2
     elseif lower_name == "vocab.txt"
         sibling_merges = joinpath(dirname(path), "merges.txt")
@@ -411,40 +439,48 @@ function _resolve_gpt2_paths(path::AbstractString)::Tuple{String,String}
     if isdir(path)
         vocab = joinpath(path, "vocab.json")
         merges = joinpath(path, "merges.txt")
-        isfile(vocab) || throw(ArgumentError("Missing vocab.json in GPT2 BPE directory: $path"))
-        isfile(merges) || throw(ArgumentError("Missing merges.txt in GPT2 BPE directory: $path"))
-        return (vocab, merges)
+        encoder = joinpath(path, "encoder.json")
+        vocab_bpe = joinpath(path, "vocab.bpe")
+
+        if isfile(vocab) && isfile(merges)
+            return (vocab, merges)
+        elseif isfile(encoder) && isfile(vocab_bpe)
+            return (encoder, vocab_bpe)
+        end
+
+        throw(ArgumentError("Missing GPT2 BPE files in directory: $path (expected vocab.json+merges.txt or encoder.json+vocab.bpe)"))
     end
 
     isfile(path) || throw(ArgumentError("GPT2 BPE path does not exist: $path"))
-    if lowercase(basename(path)) == "vocab.json"
+    lower_name = lowercase(basename(path))
+
+    if lower_name == "vocab.json"
         merges = joinpath(dirname(path), "merges.txt")
         isfile(merges) || throw(ArgumentError("Missing merges.txt next to $path"))
         return (String(path), merges)
+    elseif lower_name == "encoder.json"
+        merges = joinpath(dirname(path), "vocab.bpe")
+        isfile(merges) || throw(ArgumentError("Missing vocab.bpe next to $path"))
+        return (String(path), merges)
+    elseif lower_name == "vocab.bpe"
+        vocab = joinpath(dirname(path), "encoder.json")
+        isfile(vocab) || throw(ArgumentError("Missing encoder.json next to $path"))
+        return (vocab, String(path))
     end
 
-    throw(ArgumentError("GPT2 BPE file path must point to vocab.json or a model directory: $path"))
+    throw(ArgumentError("GPT2 BPE file path must point to vocab.json, encoder.json, vocab.bpe, or a model directory: $path"))
 end
 
 function _read_gpt2_vocab_json(path::AbstractString)::Vector{String}
-    line_re = r"^\s*\"((?:\\.|[^\"])*)\"\s*:\s*(\d+)\s*,?\s*$"
+    pair_re = r"\"((?:\\.|[^\"])*)\"\s*:\s*(\d+)"
     pairs = Tuple{String,Int}[]
 
-    open(path, "r") do io
-        for raw_line in eachline(io)
-            line = strip(raw_line)
-            isempty(line) && continue
-            line == "{" && continue
-            line == "}" && continue
-
-            m = match(line_re, line)
-            m === nothing && continue
-
-            token_raw = m.captures[1]
-            id = parse(Int, m.captures[2])
-            token = Base.unescape_string(token_raw)
-            push!(pairs, (token, id))
-        end
+    content = read(path, String)
+    for m in eachmatch(pair_re, content)
+        token_raw = m.captures[1]
+        id = parse(Int, m.captures[2])
+        token = Base.unescape_string(token_raw)
+        push!(pairs, (token, id))
     end
 
     isempty(pairs) && throw(ArgumentError("No token->id entries found in vocab.json: $path"))

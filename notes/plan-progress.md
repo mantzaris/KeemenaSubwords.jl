@@ -340,3 +340,59 @@ Close the remaining section-7 contract gap by implementing real Unigram EM + pru
   - Result: all tests passed (`KeemenaSubwords sections 1-7`).
 - Ran: `julia --project=docs docs/make.jl`
   - Result: docs build successful (local deploy skipped outside CI as expected).
+
+## 2026-02-08 - Iteration 08
+
+### Objective
+Implement plan section `## 9)` by adding downloadable public pretrained model keys (tiktoken + GPT-2 + BERT WordPiece + T5 SentencePiece), wiring them into the existing built-in registry/loader path, and validating end-to-end behavior.
+
+### Completed section-9 implementation
+- Extended the existing registry in `src/models.jl` (no parallel registry) with new keys:
+  - `:tiktoken_o200k_base`
+  - `:tiktoken_cl100k_base`
+  - `:tiktoken_r50k_base`
+  - `:tiktoken_p50k_base`
+  - `:openai_gpt2_bpe`
+  - `:bert_base_uncased_wordpiece`
+  - `:t5_small_sentencepiece_unigram`
+- Added `prefetch_models(keys=available_models(); force=false)` and integrated symbol-loading prefetch path:
+  - `load_tokenizer(name::Symbol)` now optionally prefetches and then resolves through `describe_model`.
+- Enhanced `describe_model` output with:
+  - resolved primary path,
+  - resolved required file list (`files`),
+  - upstream provenance metadata (`upstream_files`, `provenance_urls`).
+- Added full tiktoken support (`src/tiktoken.jl`):
+  - loader for `.tiktoken`,
+  - encode/tokenize/decode APIs,
+  - sparse-rank handling (real upstream files are not strictly contiguous in rank IDs).
+- Extended IO dispatch (`src/io.jl`) to support:
+  - `:tiktoken` format and auto-detection,
+  - GPT-2 upstream filename pair (`encoder.json` + `vocab.bpe`) in addition to `vocab.json` + `merges.txt`.
+- Upgraded SentencePiece loader (`src/sentencepiece.jl`) with protobuf-model parsing fallback:
+  - supports real `spiece.model` binary protobuf Unigram models.
+
+### Artifact/download tooling
+- Added `tools/build_public_model_artifact.jl` to:
+  1) download upstream assets,
+  2) verify SHA-256 for known files,
+  3) compute SHA-256 for Hugging Face files and write metadata TOML,
+  4) create and bind artifact in `Artifacts.toml`,
+  5) emit tarball + checksum + release-upload instructions.
+- Ran the script successfully:
+  - `git-tree-sha1`: `0293c813181ade29e0c88e0e48015f201d89ddeb`
+  - tarball: `artifacts-build/keemena_public_tokenizer_assets_v1-0293c813181ade29e0c88e0e48015f201d89ddeb.tar.gz`
+  - tarball sha256: `37a377b41e1e24a663de3ebf0bc9d0ca8e12a6b22d6b07fee5cecc5b99c365c4`
+
+### Tests/docs updates
+- Expanded section-9 smoke tests in `test/runtests.jl` for all new built-in keys.
+- Updated README and docs pages with:
+  - new built-in model keys,
+  - `prefetch_models(...)`,
+  - artifact build helper workflow.
+- Added/updated fallback fixture paths under `models/` for local deterministic behavior when artifact assets are unavailable.
+
+### Verification
+- Ran: `julia --project=. -e 'using Pkg; Pkg.test()'`
+  - Result: `98/98` tests passed (`KeemenaSubwords sections 1-9`).
+- Ran: `julia --project=docs docs/make.jl`
+  - Result: docs build successful (local deploy skipped outside CI as expected).

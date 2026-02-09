@@ -9,6 +9,7 @@ include("bytebpe.jl")
 include("wordpiece.jl")
 include("unigram.jl")
 include("sentencepiece.jl")
+include("tiktoken.jl")
 include("training.jl")
 include("bpe_train.jl")
 include("unigram_train.jl")
@@ -22,11 +23,13 @@ export AbstractSubwordTokenizer,
        WordPieceTokenizer,
        UnigramTokenizer,
        SentencePieceTokenizer,
+       TiktokenTokenizer,
        keemena_callable,
        level_key,
        available_models,
        describe_model,
        model_path,
+       prefetch_models,
        load_tokenizer,
        tokenize,
        encode,
