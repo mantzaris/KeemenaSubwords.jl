@@ -396,3 +396,63 @@ Implement plan section `## 9)` by adding downloadable public pretrained model ke
   - Result: `98/98` tests passed (`KeemenaSubwords sections 1-9`).
 - Ran: `julia --project=docs docs/make.jl`
   - Result: docs build successful (local deploy skipped outside CI as expected).
+
+## 2026-02-09 - Iteration 09
+
+### Objective
+Complete stage-9 model inventory work by adding curated, pinned, artifact-backed built-in tokenizers with explicit provenance/license metadata, and align README/docs with the live registry.
+
+### Completed work
+- Extended the existing built-in registry path (`available_models`, `describe_model`, `model_path`, `load_tokenizer(::Symbol)`) with curated keys:
+  - `:mistral_v1_sentencepiece`
+  - `:mistral_v3_sentencepiece`
+  - `:phi2_bpe`
+  - `:roberta_base_bpe`
+  - `:xlm_roberta_base_sentencepiece_bpe`
+- Added immutable upstream refs and license strings to registry metadata (exposed via `describe_model`):
+  - pinned Hugging Face commit URLs,
+  - `license`,
+  - `upstream_ref`,
+  - `upstream_files` and resolved `files`.
+- Kept package architecture simple:
+  - no `tokenizer.json` interpreter added,
+  - reused existing format loaders (`:sentencepiece_model`, `:bpe_gpt2`, `:tiktoken`).
+- Updated SentencePiece loader to accept directory-based model resolution for:
+  - `spm.model`,
+  - `tokenizer.model`,
+  - `tokenizer.model.v3`,
+  - `sentencepiece.bpe.model`.
+- Converted non-core model paths to artifact-only fallbacks:
+  - removed non-core in-repo files under `models/`,
+  - retained only tiny `:core_*` in-repo model assets.
+
+### Artifact and tooling updates
+- Added `tools/build_curated_model_artifacts.jl`:
+  - downloads pinned tokenizer files from reputable upstream URLs,
+  - verifies file SHA-256,
+  - builds one artifact per curated key,
+  - binds artifact hashes in `Artifacts.toml`,
+  - emits release tarball + checksum metadata.
+- Updated `Artifacts.toml` with:
+  - `git-tree-sha1` for all curated artifacts,
+  - tarball `download` stanzas + `sha256` checksums (release URL pattern prepared).
+
+### README/docs/test updates
+- README now reflects the full current registry key set and clarifies:
+  - artifact-backed vs in-repo core models,
+  - `prefetch_models(...)` offline behavior,
+  - current training status (`train_bpe`/`train_unigram` baseline implemented; `train_wordpiece` pending).
+- Updated docs pages:
+  - `docs/src/index.md`
+  - `docs/src/models.md`
+  - `docs/src/loading.md`
+  with curated key examples.
+- Expanded tests with curated key smoke checks and prefetch existence assertion:
+  - `prefetch_models([:mistral_v1_sentencepiece])` + `model_path` directory existence,
+  - load/tokenize/encode/decode-callability checks across curated keys.
+
+### Verification
+- Ran: `julia --project=. -e 'using Pkg; Pkg.test()'`
+  - Result: `128/128` tests passed (`KeemenaSubwords sections 1-9`).
+- Ran: `julia --project=docs docs/make.jl`
+  - Result: docs build successful (local deploy skipped outside CI as expected).

@@ -9,6 +9,9 @@ wp = load_tokenizer(:core_wordpiece_en)
 sp = load_tokenizer(:core_sentencepiece_unigram_en)
 tiktoken = load_tokenizer(:tiktoken_cl100k_base)
 gpt2 = load_tokenizer(:openai_gpt2_bpe)
+mistral_v1 = load_tokenizer(:mistral_v1_sentencepiece)
+phi2 = load_tokenizer(:phi2_bpe)
+xlmr = load_tokenizer(:xlm_roberta_base_sentencepiece_bpe)
 
 # directory/file auto-detection
 load_tokenizer("/path/to/model_dir")

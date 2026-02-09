@@ -15,6 +15,11 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
         @test :openai_gpt2_bpe in names
         @test :bert_base_uncased_wordpiece in names
         @test :t5_small_sentencepiece_unigram in names
+        @test :mistral_v1_sentencepiece in names
+        @test :mistral_v3_sentencepiece in names
+        @test :phi2_bpe in names
+        @test :roberta_base_bpe in names
+        @test :xlm_roberta_base_sentencepiece_bpe in names
 
         info = describe_model(:core_bpe_en)
         @test info.format == :bpe
@@ -25,6 +30,10 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
         @test gpt2_info.format == :bpe_gpt2
         @test length(gpt2_info.files) == 2
         @test all(isabspath, gpt2_info.files)
+
+        mistral_info = describe_model(:mistral_v1_sentencepiece)
+        @test mistral_info.license == "Apache-2.0"
+        @test mistral_info.format == :sentencepiece_model
     end
 
     @testset "Classic BPE core model" begin
@@ -183,6 +192,40 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
         t5 = load_tokenizer(:t5_small_sentencepiece_unigram)
         @test t5 isa SentencePieceTokenizer
         @test !isempty(tokenize(t5, "hello world"))
+    end
+
+    @testset "Section 9 curated model inventory keys" begin
+        pre = prefetch_models([:mistral_v1_sentencepiece])
+        @test pre[:mistral_v1_sentencepiece]
+        @test isdir(model_path(:mistral_v1_sentencepiece))
+
+        curated = prefetch_models([
+            :mistral_v1_sentencepiece,
+            :mistral_v3_sentencepiece,
+            :phi2_bpe,
+            :roberta_base_bpe,
+            :xlm_roberta_base_sentencepiece_bpe,
+        ])
+        @test all(values(curated))
+
+        for key in (:mistral_v1_sentencepiece, :mistral_v3_sentencepiece, :xlm_roberta_base_sentencepiece_bpe)
+            tok = load_tokenizer(key)
+            @test tok isa SentencePieceTokenizer
+            @test !isempty(tokenize(tok, "hello world"))
+            ids = encode(tok, "hello world")
+            @test !isempty(ids)
+            @test decode(tok, ids) isa String
+        end
+
+        for key in (:phi2_bpe, :roberta_base_bpe)
+            tok = load_tokenizer(key)
+            @test tok isa ByteBPETokenizer
+            pieces = tokenize(tok, "hello world")
+            @test !isempty(pieces)
+            ids = encode(tok, "hello world")
+            @test !isempty(ids)
+            @test decode(tok, ids) isa String
+        end
     end
 
     @testset "Section 4 integration helpers" begin

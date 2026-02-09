@@ -37,6 +37,8 @@ describe_model(:core_wordpiece_en)
 describe_model(:core_sentencepiece_unigram_en)
 describe_model(:tiktoken_cl100k_base)
 describe_model(:openai_gpt2_bpe)
+describe_model(:mistral_v1_sentencepiece)
+describe_model(:phi2_bpe)
 ```
 
 Public baseline keys:
@@ -47,6 +49,11 @@ Public baseline keys:
 - `:openai_gpt2_bpe`
 - `:bert_base_uncased_wordpiece`
 - `:t5_small_sentencepiece_unigram`
+- `:mistral_v1_sentencepiece`
+- `:mistral_v3_sentencepiece`
+- `:phi2_bpe`
+- `:roberta_base_bpe`
+- `:xlm_roberta_base_sentencepiece_bpe`
 
 Prefetch artifacts (when available) for offline use:
 

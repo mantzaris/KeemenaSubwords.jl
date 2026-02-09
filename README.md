@@ -13,19 +13,22 @@ Implemented core scope from plan sections 1-3:
 - Unigram LM
 - SentencePiece `.model` compatibility wrapper (lightweight text + protobuf unigram loading)
 
-Built-in core models:
-- `:core_bpe_en`
-- `:core_wordpiece_en`
-- `:core_sentencepiece_unigram_en`
-
-Additional built-in public baseline keys:
-- `:tiktoken_o200k_base`
-- `:tiktoken_cl100k_base`
-- `:tiktoken_r50k_base`
-- `:tiktoken_p50k_base`
-- `:openai_gpt2_bpe`
+Built-in model keys currently exposed by the registry:
 - `:bert_base_uncased_wordpiece`
+- `:core_bpe_en`
+- `:core_sentencepiece_unigram_en`
+- `:core_wordpiece_en`
+- `:mistral_v1_sentencepiece`
+- `:mistral_v3_sentencepiece`
+- `:openai_gpt2_bpe`
+- `:phi2_bpe`
+- `:roberta_base_bpe`
 - `:t5_small_sentencepiece_unigram`
+- `:tiktoken_cl100k_base`
+- `:tiktoken_o200k_base`
+- `:tiktoken_p50k_base`
+- `:tiktoken_r50k_base`
+- `:xlm_roberta_base_sentencepiece_bpe`
 
 ## Installation
 
@@ -66,9 +69,10 @@ load_tokenizer("/path/to/o200k_base.tiktoken")
 load_tokenizer(("/path/to/vocab.txt", "/path/to/merges.txt"))
 ```
 
-## Prefetch built-ins for offline use
+## Artifact-backed vs in-repo models
 
-`load_tokenizer(:model_key)` resolves files from artifacts first, then in-repo fallback paths.
+`load_tokenizer(:model_key)` resolves tokenizer assets from `Artifacts.toml` first.  
+Only the tiny `:core_*` models are shipped in-repo as fallbacks under `models/`.
 
 ```julia
 using KeemenaSubwords
@@ -79,11 +83,19 @@ status = prefetch_models([
     :openai_gpt2_bpe,
     :bert_base_uncased_wordpiece,
     :t5_small_sentencepiece_unigram,
+    :mistral_v1_sentencepiece,
+    :mistral_v3_sentencepiece,
+    :phi2_bpe,
+    :roberta_base_bpe,
+    :xlm_roberta_base_sentencepiece_bpe,
 ])
 ```
 
+`prefetch_models(...)` triggers lazy artifact installation up front so later calls to `load_tokenizer(:key)` work offline.
+
 Artifact build helper for maintainers:
 - `julia --project=. tools/build_public_model_artifact.jl`
+- `julia --project=. tools/build_curated_model_artifacts.jl`
 
 ## KeemenaPreprocessing integration
 

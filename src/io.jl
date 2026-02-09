@@ -196,6 +196,12 @@ function _detect_format(path::String)::Symbol
         has_encoder_json = isfile(joinpath(path, "encoder.json"))
         has_vocab_bpe = isfile(joinpath(path, "vocab.bpe"))
         has_tokenizer_json = isfile(joinpath(path, "tokenizer.json"))
+        has_sentencepiece_model = any(isfile, [
+            joinpath(path, "spm.model"),
+            joinpath(path, "tokenizer.model"),
+            joinpath(path, "tokenizer.model.v3"),
+            joinpath(path, "sentencepiece.bpe.model"),
+        ])
         tiktoken_files = filter(p -> endswith(lowercase(p), ".tiktoken"), readdir(path; join=true))
 
         if (has_vocab_json && has_merges) || (has_encoder_json && has_vocab_bpe)
@@ -206,7 +212,7 @@ function _detect_format(path::String)::Symbol
             return :wordpiece
         elseif isfile(joinpath(path, "unigram.tsv"))
             return :unigram
-        elseif isfile(joinpath(path, "spm.model"))
+        elseif has_sentencepiece_model
             return :sentencepiece
         elseif length(tiktoken_files) == 1
             return :tiktoken
@@ -224,7 +230,7 @@ function _detect_format(path::String)::Symbol
     lower_path = lowercase(path)
     lower_name = lowercase(basename(path))
 
-    if endswith(lower_path, ".model")
+    if endswith(lower_path, ".model") || endswith(lower_path, ".model.v3")
         return :sentencepiece
     elseif endswith(lower_path, ".tiktoken")
         return :tiktoken

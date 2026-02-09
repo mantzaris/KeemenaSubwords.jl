@@ -16,14 +16,14 @@ function load_sentencepiece(
     path::AbstractString;
     model_name::Union{Nothing,AbstractString}=nothing,
 )::SentencePieceTokenizer
-    isfile(path) || throw(ArgumentError("SentencePiece model path does not exist: $path"))
+    model_path = _resolve_sentencepiece_model_path(path)
 
-    parsed = _read_sentencepiece_model(path)
+    parsed = _read_sentencepiece_model(model_path)
     mtype = parsed.model_type
     marker = parsed.whitespace_marker
     unk = parsed.unk_token
 
-    name = model_name === nothing ? basename(path) : String(model_name)
+    name = model_name === nothing ? basename(model_path) : String(model_name)
 
     inner = if mtype == :unigram
         vocab = build_vocab(parsed.tokens; special_tokens=parsed.special_map)
@@ -47,6 +47,22 @@ function load_sentencepiece(
 
     metadata = TokenizerMetadata(:sentencepiece, name, v"0.2.0", :none)
     return SentencePieceTokenizer(inner, marker, metadata)
+end
+
+function _resolve_sentencepiece_model_path(path::AbstractString)::String
+    if isdir(path)
+        candidates = String[]
+        for filename in ("spm.model", "tokenizer.model", "tokenizer.model.v3", "sentencepiece.bpe.model")
+            candidate = joinpath(path, filename)
+            isfile(candidate) && push!(candidates, candidate)
+        end
+
+        isempty(candidates) && throw(ArgumentError("No supported SentencePiece model file found in directory: $path"))
+        return candidates[1]
+    end
+
+    isfile(path) || throw(ArgumentError("SentencePiece model path does not exist: $path"))
+    return String(path)
 end
 
 (tokenizer::SentencePieceTokenizer)(text::AbstractString)::Vector{String} = tokenize(tokenizer, text)

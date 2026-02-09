@@ -44,13 +44,13 @@ const ASSET_SPECS = [
     ),
     (
         relative_path = "wordpiece/bert_base_uncased/vocab.txt",
-        url = "https://huggingface.co/bert-base-uncased/raw/main/vocab.txt",
-        sha256 = nothing,
+        url = "https://huggingface.co/bert-base-uncased/resolve/86b5e0934494bd15c9632b12f734a8a67f723594/vocab.txt",
+        sha256 = "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3",
     ),
     (
         relative_path = "sentencepiece/t5_small/spiece.model",
-        url = "https://huggingface.co/google-t5/t5-small/resolve/main/spiece.model",
-        sha256 = nothing,
+        url = "https://huggingface.co/google-t5/t5-small/resolve/df1b051c49625cf57a3d0d8d3863ed4d13564fe4/spiece.model",
+        sha256 = "d60acb128cf7b7f2536e8f38a5b18a05535c9e14c7a355904270e15b0945ea86",
     ),
 ]
 
