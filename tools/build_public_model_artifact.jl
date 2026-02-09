@@ -1,6 +1,5 @@
 #!/usr/bin/env julia
 
-using Dates
 using Downloads
 using Pkg.Artifacts
 using SHA
@@ -70,7 +69,6 @@ end
 
 function write_metadata(path::AbstractString, records)::Nothing
     payload = Dict(
-        "generated_at_utc" => string(Dates.now(Dates.UTC)),
         "artifact_name" => ARTIFACT_NAME,
         "files" => [
             Dict(

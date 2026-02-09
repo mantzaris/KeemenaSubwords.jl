@@ -22,6 +22,7 @@ Built-in model keys currently exposed by the registry:
 - `:mistral_v3_sentencepiece`
 - `:openai_gpt2_bpe`
 - `:phi2_bpe`
+- `:qwen2_5_bpe`
 - `:roberta_base_bpe`
 - `:t5_small_sentencepiece_unigram`
 - `:tiktoken_cl100k_base`
@@ -57,8 +58,11 @@ decode(tiktoken, encode(tiktoken, "hello world"))
 ```julia
 # model registry
 available_models()
+available_models(format=:bpe_gpt2)
+available_models(family=:mistral)
 describe_model(:core_bpe_en)
 describe_model(:tiktoken_cl100k_base)
+recommended_defaults_for_llms()
 
 # path loading
 load_tokenizer("/path/to/model_dir")
@@ -86,12 +90,24 @@ status = prefetch_models([
     :mistral_v1_sentencepiece,
     :mistral_v3_sentencepiece,
     :phi2_bpe,
+    :qwen2_5_bpe,
     :roberta_base_bpe,
     :xlm_roberta_base_sentencepiece_bpe,
 ])
 ```
 
 `prefetch_models(...)` triggers lazy artifact installation up front so later calls to `load_tokenizer(:key)` work offline.
+
+External user-supplied tokenizers (supported, not shipped):
+- Llama 2 style SentencePiece:
+  - `load_tokenizer("/path/to/tokenizer.model")`
+- Llama 3 style tiktoken:
+  - `load_tokenizer("/path/to/llama3_tokenizer.tiktoken"; format=:tiktoken)`
+- Mistral Tekken:
+  - No built-in is shipped by default; use user-supplied tiktoken-compatible files.
+  - `load_tokenizer("/path/to/tekken_like.tiktoken"; format=:tiktoken)`
+- Optional registry helper for local paths:
+  - `register_external_model!(:my_llama, "/path/to/tokenizer.model"; format=:sentencepiece_model, family=:llama)`
 
 Artifact build helper for maintainers:
 - `julia --project=. tools/build_public_model_artifact.jl`

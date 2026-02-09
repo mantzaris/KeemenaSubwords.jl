@@ -18,6 +18,7 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
         @test :mistral_v1_sentencepiece in names
         @test :mistral_v3_sentencepiece in names
         @test :phi2_bpe in names
+        @test :qwen2_5_bpe in names
         @test :roberta_base_bpe in names
         @test :xlm_roberta_base_sentencepiece_bpe in names
 
@@ -34,6 +35,14 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
         mistral_info = describe_model(:mistral_v1_sentencepiece)
         @test mistral_info.license == "Apache-2.0"
         @test mistral_info.format == :sentencepiece_model
+
+        bpe_models = available_models(format=:bpe_gpt2)
+        @test :phi2_bpe in bpe_models
+        @test :qwen2_5_bpe in bpe_models
+        @test :roberta_base_bpe in bpe_models
+
+        @test available_models(family=:qwen) == [:qwen2_5_bpe]
+        @test :qwen2_5_bpe in recommended_defaults_for_llms()
     end
 
     @testset "Classic BPE core model" begin
@@ -203,6 +212,7 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
             :mistral_v1_sentencepiece,
             :mistral_v3_sentencepiece,
             :phi2_bpe,
+            :qwen2_5_bpe,
             :roberta_base_bpe,
             :xlm_roberta_base_sentencepiece_bpe,
         ])
@@ -217,7 +227,7 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
             @test decode(tok, ids) isa String
         end
 
-        for key in (:phi2_bpe, :roberta_base_bpe)
+        for key in (:phi2_bpe, :qwen2_5_bpe, :roberta_base_bpe)
             tok = load_tokenizer(key)
             @test tok isa ByteBPETokenizer
             pieces = tokenize(tok, "hello world")
@@ -226,6 +236,23 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
             @test !isempty(ids)
             @test decode(tok, ids) isa String
         end
+    end
+
+    @testset "Section 10 external model registration" begin
+        ext_key = :external_test_bpe
+        ext_path = fixture("bpe")
+        register_external_model!(
+            ext_key,
+            ext_path;
+            format=:bpe,
+            family=:external,
+            description="External BPE fixture for testing",
+        )
+
+        @test ext_key in available_models(family=:external)
+        tok = load_tokenizer(ext_key; prefetch=false)
+        @test tok isa BPETokenizer
+        @test !isempty(tokenize(tok, "hello world"))
     end
 
     @testset "Section 4 integration helpers" begin

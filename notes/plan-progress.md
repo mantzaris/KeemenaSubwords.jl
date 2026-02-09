@@ -456,3 +456,47 @@ Complete stage-9 model inventory work by adding curated, pinned, artifact-backed
   - Result: `128/128` tests passed (`KeemenaSubwords sections 1-9`).
 - Ran: `julia --project=docs docs/make.jl`
   - Result: docs build successful (local deploy skipped outside CI as expected).
+
+## 2026-02-09 - Iteration 10
+
+### Objective
+Complete plan section `## 10)` by tightening LLM-oriented model coverage UX and ensuring README/docs consistency with the implemented registry and artifact strategy.
+
+### Completed section-10 work
+- Added/kept high-impact artifact-backed built-ins in the existing registry path, including `:qwen2_5_bpe`.
+- Kept package scope simple:
+  - no full `tokenizer.json` interpreter was introduced,
+  - loaders remain based on supported file families (`.tiktoken`, GPT2/RoBERTa `vocab.json+merges.txt` / `encoder.json+vocab.bpe`, WordPiece `vocab.txt`, SentencePiece model files).
+- Added model inventory UX helpers in `src/models.jl`:
+  - `available_models(; format=nothing, family=nothing)`,
+  - `recommended_defaults_for_llms()`,
+  - `register_external_model!(...)` for user-supplied assets (e.g., gated Llama tokenizers).
+- Improved model provenance/source reporting:
+  - `_resolve_model_source` now reports `:external` for user-registered existing local assets (instead of `:missing`).
+- Explicitly handled Mistral Tekken as **supported external path usage** (not shipped as a built-in) pending clearly redistributable pinned assets.
+
+### README/docs alignment updates
+- Updated docs examples to match README and live API/registry behavior:
+  - `docs/src/index.md`
+  - `docs/src/models.md`
+  - `docs/src/loading.md`
+- Added/updated documentation coverage for:
+  - `:qwen2_5_bpe`,
+  - `available_models` filtering by `format`/`family`,
+  - `recommended_defaults_for_llms()` prefetch workflow,
+  - external-user-supplied Llama 2/Llama 3 and Tekken-style loading examples,
+  - `register_external_model!` usage.
+
+### Test coverage additions retained
+- Registry/filter/defaults tests include:
+  - `available_models(format=:bpe_gpt2)` contains `:qwen2_5_bpe`,
+  - `available_models(family=:qwen) == [:qwen2_5_bpe]`,
+  - `recommended_defaults_for_llms()` includes `:qwen2_5_bpe`.
+- Added external model registration smoke test:
+  - `register_external_model!` + `load_tokenizer(:external_test_bpe)` round-trip callability.
+
+### Verification
+- Ran: `julia --project=. -e 'using Pkg; Pkg.test()'`
+  - Result: `141/141` tests passed.
+- Ran: `julia --project=docs docs/make.jl`
+  - Result: docs build successful (local deploy skipped outside CI as expected).

@@ -32,6 +32,8 @@ level_key(tokenizer)
 
 ```julia
 available_models()
+available_models(format=:bpe_gpt2)
+available_models(family=:mistral)
 describe_model(:core_bpe_en)
 describe_model(:core_wordpiece_en)
 describe_model(:core_sentencepiece_unigram_en)
@@ -39,6 +41,8 @@ describe_model(:tiktoken_cl100k_base)
 describe_model(:openai_gpt2_bpe)
 describe_model(:mistral_v1_sentencepiece)
 describe_model(:phi2_bpe)
+describe_model(:qwen2_5_bpe)
+recommended_defaults_for_llms()
 ```
 
 Public baseline keys:
@@ -52,14 +56,22 @@ Public baseline keys:
 - `:mistral_v1_sentencepiece`
 - `:mistral_v3_sentencepiece`
 - `:phi2_bpe`
+- `:qwen2_5_bpe`
 - `:roberta_base_bpe`
 - `:xlm_roberta_base_sentencepiece_bpe`
 
 Prefetch artifacts (when available) for offline use:
 
 ```julia
-prefetch_models([:tiktoken_cl100k_base, :openai_gpt2_bpe])
+prefetch_models([
+    :tiktoken_cl100k_base,
+    :openai_gpt2_bpe,
+    :mistral_v3_sentencepiece,
+    :qwen2_5_bpe,
+])
 ```
+
+Only tiny `:core_*` assets ship in this repository. Most real model files are lazy artifacts resolved from `Artifacts.toml`. Gated assets are supported via external user-supplied paths.
 
 ## KeemenaPreprocessing Integration
 

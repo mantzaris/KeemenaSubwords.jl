@@ -1,6 +1,5 @@
 #!/usr/bin/env julia
 
-using Dates
 using Downloads
 using Pkg.Artifacts
 using SHA
@@ -57,6 +56,24 @@ const MODEL_SPECS = [
         ],
     ),
     (
+        key = :qwen2_5_bpe,
+        artifact_name = "qwen2_5_bpe",
+        license = "Apache-2.0",
+        upstream_ref = "huggingface:Qwen/Qwen2.5-7B@d149729398750b98c0af14eb82c78cfe92750796",
+        files = [
+            (
+                name = "vocab.json",
+                url = "https://huggingface.co/Qwen/Qwen2.5-7B/resolve/d149729398750b98c0af14eb82c78cfe92750796/vocab.json",
+                sha256 = "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+            ),
+            (
+                name = "merges.txt",
+                url = "https://huggingface.co/Qwen/Qwen2.5-7B/resolve/d149729398750b98c0af14eb82c78cfe92750796/merges.txt",
+                sha256 = "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3",
+            ),
+        ],
+    ),
+    (
         key = :roberta_base_bpe,
         artifact_name = "roberta_base_bpe",
         license = "MIT",
@@ -103,7 +120,6 @@ end
 
 function write_metadata(path::AbstractString, spec, records)::Nothing
     payload = Dict(
-        "generated_at_utc" => string(Dates.now(Dates.UTC)),
         "key" => String(spec.key),
         "artifact_name" => spec.artifact_name,
         "license" => spec.license,

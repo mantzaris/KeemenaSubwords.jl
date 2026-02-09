@@ -150,6 +150,15 @@ const _MODEL_REGISTRY = Dict{Symbol,BuiltinModelEntry}(
         "MIT",
         "huggingface:microsoft/phi-2@810d367871c1d460086d9f82db8696f2e0a0fcd0",
     ),
+    :qwen2_5_bpe => _entry(
+        :bpe_gpt2,
+        "qwen2_5_bpe",
+        "qwen2_5_bpe",
+        joinpath(_ARTIFACT_ONLY_ROOT, "qwen2_5_bpe"),
+        "Qwen2.5-7B tokenizer files (vocab.json + merges.txt).",
+        "Apache-2.0",
+        "huggingface:Qwen/Qwen2.5-7B@d149729398750b98c0af14eb82c78cfe92750796",
+    ),
     :roberta_base_bpe => _entry(
         :bpe_gpt2,
         "roberta_base_bpe",
@@ -254,6 +263,18 @@ const _MODEL_UPSTREAM_FILES = Dict{
             sha256 = "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5",
         ),
     ],
+    :qwen2_5_bpe => [
+        (
+            relative_path = "qwen2_5_bpe/vocab.json",
+            url = "https://huggingface.co/Qwen/Qwen2.5-7B/resolve/d149729398750b98c0af14eb82c78cfe92750796/vocab.json",
+            sha256 = "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+        ),
+        (
+            relative_path = "qwen2_5_bpe/merges.txt",
+            url = "https://huggingface.co/Qwen/Qwen2.5-7B/resolve/d149729398750b98c0af14eb82c78cfe92750796/merges.txt",
+            sha256 = "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3",
+        ),
+    ],
     :roberta_base_bpe => [
         (
             relative_path = "roberta_base_bpe/vocab.json",
@@ -275,13 +296,88 @@ const _MODEL_UPSTREAM_FILES = Dict{
     ],
 )
 
+const _MODEL_FAMILY = Dict{Symbol,Symbol}(
+    :core_bpe_en => :core,
+    :core_wordpiece_en => :core,
+    :core_sentencepiece_unigram_en => :core,
+    :tiktoken_o200k_base => :openai,
+    :tiktoken_cl100k_base => :openai,
+    :tiktoken_r50k_base => :openai,
+    :tiktoken_p50k_base => :openai,
+    :openai_gpt2_bpe => :openai,
+    :bert_base_uncased_wordpiece => :bert,
+    :t5_small_sentencepiece_unigram => :t5,
+    :mistral_v1_sentencepiece => :mistral,
+    :mistral_v3_sentencepiece => :mistral,
+    :phi2_bpe => :phi,
+    :qwen2_5_bpe => :qwen,
+    :roberta_base_bpe => :roberta,
+    :xlm_roberta_base_sentencepiece_bpe => :xlm_roberta,
+)
+
 """
 List available built-in model names.
 """
-function available_models()::Vector{Symbol}
+function available_models(
+    ;
+    format::Union{Nothing,Symbol}=nothing,
+    family::Union{Nothing,Symbol}=nothing,
+)::Vector{Symbol}
     names = collect(keys(_MODEL_REGISTRY))
+    if format !== nothing
+        names = [name for name in names if _matches_format(_MODEL_REGISTRY[name].format, format)]
+    end
+    if family !== nothing
+        names = [name for name in names if get(_MODEL_FAMILY, name, :unknown) == family]
+    end
     sort!(names)
     return names
+end
+
+"""
+Register an external tokenizer path under a symbolic key.
+
+This supports user-managed assets (for example gated Llama tokenizers)
+without bundling them as built-ins.
+"""
+function register_external_model!(
+    key::Symbol,
+    path::AbstractString;
+    format::Symbol,
+    description::AbstractString="User-supplied external tokenizer",
+    family::Symbol=:external,
+    license::AbstractString="external-user-supplied",
+    upstream_ref::AbstractString="user-supplied",
+)::Nothing
+    resolved_path = normpath(String(path))
+    _MODEL_REGISTRY[key] = _entry(
+        format,
+        nothing,
+        nothing,
+        resolved_path,
+        String(description),
+        String(license),
+        String(upstream_ref),
+    )
+    _MODEL_UPSTREAM_FILES[key] = Vector{NamedTuple{(:relative_path, :url, :sha256),Tuple{String,String,Union{Nothing,String}}}}()
+    _MODEL_FAMILY[key] = family
+    return nothing
+end
+
+"""
+Recommended built-in keys for LLM-oriented default prefetching.
+"""
+function recommended_defaults_for_llms()::Vector{Symbol}
+    candidates = [
+        :tiktoken_cl100k_base,
+        :tiktoken_o200k_base,
+        :mistral_v3_sentencepiece,
+        :phi2_bpe,
+        :qwen2_5_bpe,
+        :roberta_base_bpe,
+        :xlm_roberta_base_sentencepiece_bpe,
+    ]
+    return [key for key in candidates if haskey(_MODEL_REGISTRY, key)]
 end
 
 """
@@ -331,12 +427,27 @@ function describe_model(name::Symbol)::NamedTuple
         exists = exists,
         source = source,
         description = entry.description,
+        family = get(_MODEL_FAMILY, name, :unknown),
         license = entry.license,
         upstream_ref = entry.upstream_ref,
         artifact_name = entry.artifact_name,
         upstream_files = upstream,
         provenance_urls = [f.url for f in upstream],
     )
+end
+
+function _matches_format(model_format::Symbol, query_format::Symbol)::Bool
+    if model_format == query_format
+        return true
+    elseif query_format == :wordpiece
+        return model_format in (:wordpiece, :wordpiece_vocab)
+    elseif query_format == :sentencepiece
+        return model_format in (:sentencepiece, :sentencepiece_model)
+    elseif query_format == :bpe
+        return model_format in (:bpe, :bpe_gpt2, :bytebpe)
+    end
+
+    return false
 end
 
 """
@@ -365,8 +476,11 @@ function _resolve_model_source(entry::BuiltinModelEntry, resolved::String)::Symb
         end
     end
 
-    if ispath(resolved) && startswith(normpath(resolved), normpath(joinpath(_PACKAGE_ROOT, "models")))
-        return :in_repo
+    if ispath(resolved)
+        if startswith(normpath(resolved), normpath(joinpath(_PACKAGE_ROOT, "models")))
+            return :in_repo
+        end
+        return :external
     end
 
     return :missing

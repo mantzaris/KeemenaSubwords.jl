@@ -11,6 +11,7 @@ tiktoken = load_tokenizer(:tiktoken_cl100k_base)
 gpt2 = load_tokenizer(:openai_gpt2_bpe)
 mistral_v1 = load_tokenizer(:mistral_v1_sentencepiece)
 phi2 = load_tokenizer(:phi2_bpe)
+qwen = load_tokenizer(:qwen2_5_bpe)
 xlmr = load_tokenizer(:xlm_roberta_base_sentencepiece_bpe)
 
 # directory/file auto-detection
@@ -28,4 +29,19 @@ load_tokenizer("/path/to/gpt2_dir"; format=:bpe_gpt2)
 
 # named spec
 load_tokenizer((format=:bpe_gpt2, vocab="/path/to/vocab.txt", merges="/path/to/merges.txt"))
+
+# external user-supplied models (not shipped as built-ins)
+load_tokenizer("/path/to/tokenizer.model")                                  # Llama 2 style SentencePiece
+load_tokenizer("/path/to/llama3_tokenizer.tiktoken"; format=:tiktoken)      # Llama 3 style tiktoken
+load_tokenizer("/path/to/tekken_like.tiktoken"; format=:tiktoken)           # Mistral Tekken-like file
+
+# optional key registration for external assets
+register_external_model!(
+    :my_llama_external,
+    "/path/to/tokenizer.model";
+    format=:sentencepiece_model,
+    family=:llama,
+    description="User-supplied Llama tokenizer",
+)
+load_tokenizer(:my_llama_external)
 ```
