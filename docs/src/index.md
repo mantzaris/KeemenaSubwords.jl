@@ -48,12 +48,13 @@ install_model!(:llama3_8b_tokenizer; token=ENV["HF_TOKEN"])
 
 ## Documentation Map
 
-- Built-in model inventory: `models.md`
-- Format contracts: `formats.md`
-- Local path recipes: `loading_local.md`
-- LLM cookbook: `llm_cookbook.md`
-- Installable gated models: `gated_models.md`
-- Troubleshooting: `troubleshooting.md`
+- [Built-in model inventory](models.md)
+- [Format contracts](formats.md)
+- [Local path recipes](loading_local.md)
+- [LLM cookbook](llm_cookbook.md)
+- [Installable gated models](gated_models.md)
+- [Troubleshooting](troubleshooting.md)
+- [API reference](api.md)
 
 ## KeemenaPreprocessing Integration
 
@@ -66,9 +67,4 @@ cfg = PreprocessConfiguration(tokenizer_name = keemena_callable(tok))
 bundle = preprocess_corpus(["hello world"]; config=cfg)
 ```
 
-## API
-
-```@autodocs
-Modules = [KeemenaSubwords]
-Private = false
-```
+See [API reference](api.md) for explicit loader APIs and the full exported reference.

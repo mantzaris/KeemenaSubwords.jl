@@ -7,6 +7,10 @@ end
 
 """
 Load a WordPiece tokenizer from a vocab file path or a directory containing `vocab.txt`.
+
+Examples:
+- `load_wordpiece("/path/to/vocab.txt")`
+- `load_wordpiece("/path/to/model_dir")`
 """
 function load_wordpiece(
     path::AbstractString;

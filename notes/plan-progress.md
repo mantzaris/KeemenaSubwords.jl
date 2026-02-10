@@ -866,3 +866,84 @@ Complete plan section `## 13)` by consolidating docs, slimming README, and forma
 - Full model inventory remains generated from registry metadata on docs side.
 - README is intentionally concise and links to docs for operational detail.
 - Existing public APIs remain available; explicit convenience loaders were added without removing previous entry points.
+
+## 2026-02-10 - Iteration 14
+
+### Objective
+Complete plan section `## 14)` by slimming README, polishing docs consistency, improving API discoverability, and adding CI guardrails to prevent docs/README drift and bad format examples.
+
+### Completed section-14 implementation
+
+#### README slimming and docs-first flow
+- Rewrote `README.md` as quickstart-only content:
+  - install,
+  - 3 minimal examples (built-in load, local format override, gated install),
+  - short featured models section,
+  - links to canonical docs pages.
+- Added featured-model marker block:
+  - `<!-- KEEMENA_FEATURED_MODELS_START -->`
+  - `<!-- KEEMENA_FEATURED_MODELS_END -->`
+
+#### Generated inventory split (README summary + docs full table)
+- Extended `tools/sync_readme_models.jl` to render and sync two outputs from the same registry source:
+  - README featured list block,
+  - full docs model table block in `docs/src/models.md`.
+- `--check` mode now verifies both generated blocks and fails when stale.
+
+#### Docs consistency and naming canonicalization
+- Added API docs page:
+  - `docs/src/api.md`
+  - explicit loader list via `@docs`,
+  - registry/install/discovery API list,
+  - full exported API via `@autodocs`.
+- Added API nav entry in `docs/make.jl` and linked index content in `docs/src/index.md`.
+- Canonicalized local-loading and format-reference docs:
+  - `docs/src/formats.md`
+  - `docs/src/loading_local.md`
+  - `docs/src/loading.md`
+  - `docs/src/gated_models.md`
+- Ensured examples consistently use:
+  - GPT2/RoBERTa BPE -> `vocab.json + merges.txt` with `vocab_json`, `merges_txt`,
+  - encoder variant -> `encoder.json + vocab.bpe` with `encoder_json`, `vocab_bpe`,
+  - WordPiece -> `vocab.txt` with `vocab_txt`,
+  - SentencePiece -> `model_file`,
+  - tiktoken -> `encoding_file`,
+  - HF JSON -> `tokenizer_json`.
+- Kept `register_local_model!` as canonical in examples; `register_external_model!` only appears as a deprecation note.
+
+#### API discoverability polish
+- Added/updated docstrings with example calls for explicit loader APIs:
+  - `load_bpe_gpt2`, `load_bpe_encoder`,
+  - `load_wordpiece`, `load_sentencepiece`,
+  - `load_tiktoken`, `load_hf_tokenizer_json`,
+  - `detect_tokenizer_format`, `detect_tokenizer_files`.
+- Added docstrings for gated convenience wrappers:
+  - `install_llama2_tokenizer!`
+  - `install_llama3_8b_tokenizer!`
+
+#### Guardrails and CI checks
+- Added docs example consistency checker:
+  - `tools/check_docs_examples.jl`
+  - validates common wrong format/file pairings (for example GPT2+BPE with `vocab.txt`),
+  - enforces canonical API usage in docs examples (`register_local_model!`).
+- Updated CI workflow (`.github/workflows/CI.yml`) to run:
+  - `julia --project=. tools/sync_readme_models.jl --check`
+  - `julia --project=. tools/check_docs_examples.jl`
+  - package tests.
+- Enabled docs doctest execution in `docs/make.jl` (`doctest=true`).
+
+### Verification
+- Ran: `julia --project=. tools/sync_readme_models.jl`
+  - Result: generated README featured block and docs model inventory updated.
+- Ran: `julia --project=. tools/sync_readme_models.jl --check`
+  - Result: README/docs generated blocks in sync.
+- Ran: `julia --project=. tools/check_docs_examples.jl`
+  - Result: docs examples passed consistency checks.
+- Ran: `julia --project=. -e 'using Pkg; Pkg.test()'`
+  - Result: `194/194` tests passed.
+- Ran: `julia --project=docs docs/make.jl`
+  - Result: docs build successful with doctest pass; deploy skipped locally as expected.
+
+### Notes
+- README now stays intentionally brief; full inventory/details remain docs-authoritative and generated from registry metadata.
+- Section-14 guardrails are now automated in CI to reduce future docs/API drift.

@@ -11,6 +11,10 @@ Supported model file format in this package is a lightweight text form:
 - key/value lines (`type=unigram|bpe`, `whitespace_marker=▁`, `unk_token=<unk>`)
 - piece rows: `piece<TAB>token<TAB>score[<TAB>special_symbol]`
 - bpe merge rows (for `type=bpe`): `merge<TAB>left<TAB>right`
+
+Examples:
+- `load_sentencepiece("/path/to/tokenizer.model"; kind=:auto)`
+- `load_sentencepiece("/path/to/tokenizer.model.v3"; kind=:bpe)`
 """
 function load_sentencepiece(
     path::AbstractString;

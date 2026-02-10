@@ -28,6 +28,15 @@ install_model!(:llama3_8b_tokenizer; token=ENV["HF_TOKEN"])
 llama3 = load_tokenizer(:llama3_8b_tokenizer)
 ```
 
+If you already downloaded tokenizer files elsewhere, you can skip `install_model!` and load/register directly:
+
+```julia
+llama2 = load_tokenizer("/path/to/tokenizer.model"; format=:sentencepiece_model)
+llama3 = load_tokenizer("/path/to/tokenizer.model"; format=:tiktoken)
+
+register_local_model!(:llama3_local, "/path/to/tokenizer.model"; format=:tiktoken)
+```
+
 ## Discover gated keys
 
 ```julia

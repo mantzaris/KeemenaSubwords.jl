@@ -1,5 +1,9 @@
 """
 Load a Hugging Face `tokenizer.json` tokenizer in pure Julia.
+
+Examples:
+- `load_hf_tokenizer_json("/path/to/tokenizer.json")`
+- `load_hf_tokenizer_json("/path/to/model_dir")` (expects `tokenizer.json` inside)
 """
 function load_hf_tokenizer_json(
     path::AbstractString;

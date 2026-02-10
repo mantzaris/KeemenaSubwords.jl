@@ -17,34 +17,40 @@ Julia-native subword tokenization for BPE, Byte-level BPE, WordPiece, SentencePi
 ```julia
 using KeemenaSubwords
 
-# Built-in
+# 1) built-in model
+prefetch_models([:core_bpe_en])
 bpe = load_tokenizer(:core_bpe_en)
 tokenize(bpe, "hello world")
 
-# Prefetch artifact-backed models for offline use
-prefetch_models([:tiktoken_cl100k_base, :qwen2_5_bpe])
+# 2) local path with explicit format override
+local_tiktoken = load_tokenizer("/path/to/tokenizer.model"; format=:tiktoken)
 
-# Bring your own local tokenizer file
-local_tok = load_tokenizer("/path/to/tokenizer.json"; format=:hf_tokenizer_json)
+# 3) gated install workflow
+install_model!(:llama3_8b_tokenizer; token=ENV["HF_TOKEN"])
+llama = load_tokenizer(:llama3_8b_tokenizer)
 ```
 
 ## Featured Models
 
-- `:tiktoken_cl100k_base`
-- `:tiktoken_o200k_base`
-- `:mistral_v3_sentencepiece`
-- `:qwen2_5_bpe`
-- `:phi2_bpe`
-- `:roberta_base_bpe`
+<!-- KEEMENA_FEATURED_MODELS_START -->
+_Generated from registry metadata via `tools/sync_readme_models.jl`._
+
+- **`tiktoken`**: `:tiktoken_cl100k_base`, `:tiktoken_o200k_base`
+- **`bpe_gpt2`**: `:openai_gpt2_bpe`, `:phi2_bpe`, `:roberta_base_bpe`
+- **`sentencepiece_model`**: `:mistral_v3_sentencepiece`, `:xlm_roberta_base_sentencepiece_bpe`
+- **`hf_tokenizer_json`**: `:qwen2_5_bpe`
+- **`wordpiece_vocab`**: `:bert_base_multilingual_cased_wordpiece`, `:bert_base_uncased_wordpiece`
+<!-- KEEMENA_FEATURED_MODELS_END -->
 
 ## Documentation
 
-- Model inventory and metadata: `docs/src/models.md`
-- Tokenizer formats reference: `docs/src/formats.md`
-- Loading from local paths: `docs/src/loading_local.md`
-- LLM cookbook (OpenAI/Mistral/Qwen/LLaMA): `docs/src/llm_cookbook.md`
-- Installable gated models (LLaMA): `docs/src/gated_models.md`
-- Troubleshooting detection/layout issues: `docs/src/troubleshooting.md`
+- [Models](https://mantzaris.github.io/KeemenaSubwords.jl/dev/models/)
+- [Formats and Required Files](https://mantzaris.github.io/KeemenaSubwords.jl/dev/formats/)
+- [Loading Tokenizers From Local Paths](https://mantzaris.github.io/KeemenaSubwords.jl/dev/loading_local/)
+- [LLM Cookbook](https://mantzaris.github.io/KeemenaSubwords.jl/dev/llm_cookbook/)
+- [Installable Gated Models](https://mantzaris.github.io/KeemenaSubwords.jl/dev/gated_models/)
+- [Troubleshooting](https://mantzaris.github.io/KeemenaSubwords.jl/dev/troubleshooting/)
+- [API Reference](https://mantzaris.github.io/KeemenaSubwords.jl/dev/api/)
 
 Run docs locally:
 

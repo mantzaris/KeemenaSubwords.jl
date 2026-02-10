@@ -17,6 +17,7 @@ makedocs(
     format    = Documenter.HTML(;
                   canonical = "https://mantzaris.github.io/KeemenaSubwords.jl",
                   edit_link = "main"),
+    doctest   = true,
     checkdocs = :exports,              # complain only for *exported* names :contentReference[oaicite:0]{index=0}
     pages = [
         "Home"          => "index.md",
@@ -28,6 +29,7 @@ makedocs(
         "Gated Models"  => "gated_models.md",
         "Troubleshooting" => "troubleshooting.md",
         "Built-In Models" => "models.md",
+        "API Reference" => "api.md",
     ],
 )
 

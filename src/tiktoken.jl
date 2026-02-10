@@ -14,6 +14,10 @@ Load a tiktoken encoding file (`*.tiktoken`).
 The expected format is line-based:
 `<base64_token_bytes><space><rank>`
 where ranks are non-negative integers.
+
+Examples:
+- `load_tiktoken("/path/to/o200k_base.tiktoken")`
+- `load_tiktoken("/path/to/tokenizer.model")` (when file contains tiktoken text lines)
 """
 function load_tiktoken(
     path::AbstractString;

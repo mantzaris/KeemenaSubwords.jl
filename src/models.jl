@@ -846,7 +846,18 @@ function install_model!(
     return describe_model(key)
 end
 
+"""
+Install the gated LLaMA 2 tokenizer files into local cache and register them.
+
+This is a convenience wrapper over `install_model!(:llama2_tokenizer; ...)`.
+"""
 install_llama2_tokenizer!(; kwargs...) = install_model!(:llama2_tokenizer; kwargs...)
+
+"""
+Install the gated LLaMA 3 8B tokenizer files into local cache and register them.
+
+This is a convenience wrapper over `install_model!(:llama3_8b_tokenizer; ...)`.
+"""
 install_llama3_8b_tokenizer!(; kwargs...) = install_model!(:llama3_8b_tokenizer; kwargs...)
 
 """

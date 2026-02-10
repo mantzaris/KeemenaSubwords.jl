@@ -1,69 +1,75 @@
 # Loading Tokenizers From Local Paths
 
-Use explicit format loaders when you know the file layout, or `load_tokenizer(path; format=:auto)` for detection.
+Use explicit loader functions when you know the file contract. Use `load_tokenizer(path; format=:auto)` only when auto-detection is preferred.
 
-## GPT-2 / RoBERTa style BPE (`vocab.json` + `merges.txt`)
+## 1) GPT-2 / RoBERTa style BPE (`vocab.json` + `merges.txt`)
 
 ```julia
 tok = load_bpe_gpt2("/path/to/vocab.json", "/path/to/merges.txt")
+
+# equivalent named spec
+load_tokenizer((format=:bpe_gpt2, vocab_json="/path/to/vocab.json", merges_txt="/path/to/merges.txt"))
 ```
 
-## OpenAI encoder variant (`encoder.json` + `vocab.bpe`)
+## 2) OpenAI encoder variant (`encoder.json` + `vocab.bpe`)
 
 ```julia
 tok = load_bpe_encoder("/path/to/encoder.json", "/path/to/vocab.bpe")
+
+# equivalent named spec
+load_tokenizer((format=:bpe_encoder, encoder_json="/path/to/encoder.json", vocab_bpe="/path/to/vocab.bpe"))
 ```
 
-## Classic BPE and Byte-level BPE (`vocab.txt` + `merges.txt`)
+## 3) Classic BPE / Byte-level BPE (`vocab.txt` + `merges.txt`)
 
 ```julia
 classic = load_bpe("/path/to/model_dir")
 byte_level = load_bytebpe("/path/to/model_dir")
 ```
 
-## WordPiece (`vocab.txt`)
+## 4) WordPiece (`vocab.txt`)
 
 ```julia
 wp = load_wordpiece("/path/to/vocab.txt"; continuation_prefix="##")
+
+# register via canonical key
+register_local_model!(
+    :my_wordpiece,
+    (format=:wordpiece_vocab, vocab_txt="/path/to/vocab.txt");
+    description="local WordPiece",
+)
 ```
 
-## SentencePiece (`.model`, `.model.v3`, `sentencepiece.bpe.model`)
+## 5) SentencePiece (`.model`, `.model.v3`, `sentencepiece.bpe.model`)
 
 ```julia
 sp_auto = load_sentencepiece("/path/to/tokenizer.model"; kind=:auto)
 sp_uni = load_sentencepiece("/path/to/spm.model"; kind=:unigram)
 sp_bpe = load_sentencepiece("/path/to/tokenizer.model.v3"; kind=:bpe)
+
+register_local_model!(:my_sp, (format=:sentencepiece_model, model_file="/path/to/tokenizer.model"))
 ```
 
-## tiktoken (`*.tiktoken` or text `tokenizer.model`)
+## 6) tiktoken (`*.tiktoken` or text `tokenizer.model`)
 
 ```julia
 tt = load_tiktoken("/path/to/o200k_base.tiktoken")
-llama3_style = load_tiktoken("/path/to/tokenizer.model")
+llama3_style = load_tokenizer("/path/to/tokenizer.model"; format=:tiktoken)
+
+register_local_model!(:my_tiktoken, (format=:tiktoken, encoding_file="/path/to/tokenizer.model"))
 ```
 
-## Hugging Face `tokenizer.json`
+## 7) Hugging Face `tokenizer.json`
 
 ```julia
 hf = load_hf_tokenizer_json("/path/to/tokenizer.json")
+
+register_local_model!(:my_hf, (format=:hf_tokenizer_json, tokenizer_json="/path/to/tokenizer.json"))
 ```
 
-## Generic auto-detect + override
+## 8) Generic auto-detect + override
 
 ```julia
 auto_tok = load_tokenizer("/path/to/model_dir")
 forced = load_tokenizer("/path/to/tokenizer.model"; format=:tiktoken)
-```
-
-## Register a local model key
-
-```julia
-register_local_model!(:my_local_qwen, "/path/to/model_dir"; format=:auto, family=:qwen)
-load_tokenizer(:my_local_qwen)
-
-register_local_model!(
-    :my_local_gpt2,
-    (format=:bpe_gpt2, vocab_json="/path/to/vocab.json", merges_txt="/path/to/merges.txt");
-    family=:local,
-)
 ```

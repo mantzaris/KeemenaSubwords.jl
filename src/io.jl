@@ -243,6 +243,9 @@ end
 
 """
 Inspect a tokenizer directory and return detected candidate files.
+
+Example:
+`detect_tokenizer_files("/path/to/model_dir")`
 """
 function detect_tokenizer_files(dir::AbstractString)::NamedTuple
     root = normpath(String(dir))
@@ -275,6 +278,10 @@ Detect tokenizer format from a local file or directory.
 
 Returns one of symbols such as `:hf_tokenizer_json`, `:bpe_gpt2`, `:bpe_encoder`,
 `:sentencepiece_model`, `:tiktoken`, `:wordpiece`, `:bpe`, or `:unigram`.
+
+Examples:
+- `detect_tokenizer_format("/path/to/model_dir")`
+- `detect_tokenizer_format("/path/to/tokenizer.model")`
 """
 function detect_tokenizer_format(path::AbstractString)::Symbol
     resolved = normpath(String(path))
@@ -570,6 +577,9 @@ end
 
 """
 Load GPT-2 / RoBERTa style BPE from `vocab.json` + `merges.txt`.
+
+Example:
+`load_bpe_gpt2("/path/to/vocab.json", "/path/to/merges.txt")`
 """
 function load_bpe_gpt2(
     vocab_json::AbstractString,
@@ -619,6 +629,9 @@ end
 
 """
 Load GPT-2 encoder variant from `encoder.json` + `vocab.bpe`.
+
+Example:
+`load_bpe_encoder("/path/to/encoder.json", "/path/to/vocab.bpe")`
 """
 function load_bpe_encoder(
     encoder_json::AbstractString,

@@ -37,4 +37,5 @@ load_tiktoken("/path/to/o200k_base.tiktoken")
 load_hf_tokenizer_json("/path/to/tokenizer.json")
 ```
 
-For complete local path recipes, see `loading_local.md`.
+For complete local path recipes, see [Loading Tokenizers From Local Paths](loading_local.md).
+For explicit file contracts and named-spec keys, see [Tokenizer Formats and Required Files](formats.md).
