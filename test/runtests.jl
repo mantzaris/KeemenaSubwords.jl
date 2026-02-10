@@ -4,7 +4,7 @@ using KeemenaSubwords
 const FIXTURES_DIR = joinpath(@__DIR__, "fixtures")
 fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
 
-@testset "KeemenaSubwords sections 1-15" begin
+@testset "KeemenaSubwords sections 1-16" begin
     @testset "Model registry" begin
         names = available_models()
         @test :core_bpe_en in names
@@ -550,5 +550,41 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
         @test !isempty(tokenize(uni_reload, "hello world"))
 
         @test_throws ArgumentError train_wordpiece(corpus; vocab_size=100)
+    end
+
+    @testset "Section 16 docs contracts and loader coherence" begin
+        wp_path = fixture("wordpiece", "vocab.txt")
+        wp_by_path = load_tokenizer((format=:wordpiece_vocab, path=wp_path))
+        wp_by_alias = load_tokenizer((format=:wordpiece_vocab, vocab_txt=wp_path))
+        @test wp_by_path isa WordPieceTokenizer
+        @test wp_by_alias isa WordPieceTokenizer
+        @test tokenize(wp_by_path, "hello keemena") == tokenize(wp_by_alias, "hello keemena")
+
+        hf_path = fixture("hf_json_wordpiece", "tokenizer.json")
+        hf_by_path = load_tokenizer((format=:hf_tokenizer_json, path=hf_path))
+        hf_by_alias = load_tokenizer((format=:hf_tokenizer_json, tokenizer_json=hf_path))
+        @test hf_by_path isa HuggingFaceJSONTokenizer
+        @test hf_by_alias isa HuggingFaceJSONTokenizer
+        @test tokenize(hf_by_path, "Hello world") == tokenize(hf_by_alias, "Hello world")
+
+        uni_path = fixture("unigram", "unigram.tsv")
+        uni_by_path = load_tokenizer((format=:unigram, path=uni_path))
+        uni_by_alias = load_tokenizer((format=:unigram, unigram_tsv=uni_path))
+        @test uni_by_path isa UnigramTokenizer
+        @test uni_by_alias isa UnigramTokenizer
+        @test tokenize(uni_by_path, "hello world") == tokenize(uni_by_alias, "hello world")
+
+        combined = mktempdir()
+        cp(fixture("hf_json_wordpiece", "tokenizer.json"), joinpath(combined, "tokenizer.json"))
+        cp(fixture("bpe_gpt2", "vocab.json"), joinpath(combined, "vocab.json"))
+        cp(fixture("bpe_gpt2", "merges.txt"), joinpath(combined, "merges.txt"))
+
+        @test detect_tokenizer_format(combined) == :hf_tokenizer_json
+        @test load_tokenizer(combined) isa HuggingFaceJSONTokenizer
+        @test load_tokenizer(combined; format=:bpe_gpt2) isa ByteBPETokenizer
+
+        @test load_bpe(fixture("bpe")) isa BPETokenizer
+        @test load_bytebpe(fixture("bpe")) isa ByteBPETokenizer
+        @test load_unigram(fixture("unigram")) isa UnigramTokenizer
     end
 end

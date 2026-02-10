@@ -8,6 +8,8 @@ Julia-native subword tokenization for BPE, Byte-level BPE, WordPiece, SentencePi
 
 ## Installation
 
+Requires Julia `1.10` or newer.
+
 ```julia
 ] add https://github.com/mantzaris/KeemenaSubwords.jl
 ```

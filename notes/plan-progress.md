@@ -1042,3 +1042,142 @@ Complete plan section `## 15)` with final docs/API consistency polish and deeper
 ### Notes
 - Marker leakage on docs models page is resolved by removing marker lines from generated page content.
 - Full inventory remains generated from registry metadata; README stays concise and docs-first.
+
+
+## 16) Solidify the current state (docs contracts, CI stability, and public API coherence)
+
+### Objectives
+- Make CI green on the supported Julia versions (or formally raise the minimum Julia version and align CI).
+- Eliminate docs drift: the “Formats” and “Loading Local” pages must match the real exported API and the named-spec contracts.
+- Make byte-level behavior explicit in docs so LLM users understand what they are getting.
+
+### Tasks
+
+#### A) Fix CI failures (highest priority)
+1. Reproduce CI locally on the CI matrix versions:
+   - Julia 1.10 (first) then Julia 1.6 (only if you still intend to support it).
+2. Decide and document minimum supported Julia version:
+   - If you require modern Julia (recommended for tokenization performance and JSON stacks), set Project.toml compat accordingly and remove 1.6 from CI.
+   - If you keep 1.6, patch code/tests for 1.6 compatibility and add version-gated tests where needed.
+3. Remove hidden/bidi Unicode characters from `.github/workflows/CI.yml`:
+   - Rewrite the file in plain ASCII, reindent, and re-commit to remove “hidden Unicode” warnings.
+
+#### B) Resolve API/doc drift for local loading contracts
+4. Unify the named-spec “canonical keys” for single-file formats:
+   - Choose one canonical pattern, recommended:
+     - `path` for single-file formats (wordpiece vocab, unigram.tsv, tokenizer.json, tokenizer.model)
+     - format-specific keys for multi-file formats (vocab_json + merges_txt, encoder_json + vocab_bpe)
+5. Implement backward-compatible aliases (so old docs or user code still works):
+   - For WordPiece:
+     - accept both `path` and `vocab_txt`
+   - For HF tokenizer.json:
+     - accept both `path` and `tokenizer_json`
+   - For Unigram:
+     - accept both `path` and `unigram_tsv` (optional alias, but helpful)
+6. Update docs so every page uses the same canonical keys:
+   - Formats page: update the “Canonical Named Spec Keys” column.
+   - Loading Local page: update examples to match canonical keys.
+   - API reference examples: align them too.
+
+#### C) Make classic BPE / ByteBPE / Unigram loader API consistent
+7. Decide whether `load_bpe`, `load_bytebpe`, `load_unigram` are public:
+   - If public:
+     - export them, add docstrings, and include them in the API reference page.
+     - add at least one unit test per loader.
+   - If not public:
+     - remove them from docs and replace with:
+       - `load_tokenizer(path; format=:bpe)`
+       - `load_tokenizer(path; format=:bytebpe)`
+       - `load_tokenizer(path; format=:unigram)`
+
+#### D) Byte-level documentation tightening (small but high UX value)
+8. Add a short “Byte-level behavior” subsection to docs:
+   - Which formats are byte-level (GPT2/RoBERTa style) vs not (WordPiece, SentencePiece).
+   - What decode/encode guarantees exist per tokenizer type.
+   - How byte-level interacts with HF tokenizer.json pipelines.
+
+#### E) Test coverage improvements to prevent regressions
+9. Add tests that enforce doc-contract stability:
+   - Named-spec alias tests: `path` and the format-specific key must both work where intended.
+   - Format detection precedence tests (directory with both tokenizer.json and vocab/merges should pick tokenizer.json unless overridden).
+10. Add a small “docs-contract check” script or test that fails if:
+   - docs Formats table lists keys not supported by `load_tokenizer` named-spec parsing
+   - docs reference non-exported functions (unless explicitly module-qualified)
+
+### Implementation order
+1) CI green + workflow unicode cleanup
+2) Named-spec canonical keys + alias support
+3) Docs updates for formats/loading-local/api examples
+4) Loader API decision for load_bpe/load_bytebpe/load_unigram and tests
+5) Byte-level doc subsection + tests for detection and aliases
+
+## 2026-02-10 - Iteration 16
+
+### Objective
+Complete plan section `## 16)` by stabilizing CI/version policy, aligning local-loading docs contracts with the real API, and locking the behavior with regression tests.
+
+### Completed section-16 implementation
+
+#### CI and version baseline cleanup
+- Rewrote `.github/workflows/CI.yml` in plain ASCII and normalized formatting.
+- Aligned CI matrix with package compat:
+  - kept Julia `1.10` and `pre`,
+  - removed Julia `1.6` (package already requires Julia `1.10` in `Project.toml`).
+- Added/kept sync and docs-contract checks in CI test job:
+  - `tools/sync_readme_models.jl --check`
+  - `tools/check_docs_examples.jl`
+- Documented the minimum version in `README.md` (`Julia 1.10+`).
+
+#### Named-spec contract unification (+ aliases)
+- Made `path` the canonical single-file named-spec key in docs and examples.
+- Kept backward-compatible aliases in `load_tokenizer(spec::NamedTuple)`:
+  - WordPiece: `path` + `vocab_txt`,
+  - HF tokenizer.json: `path` + `tokenizer_json`,
+  - Unigram: `path` + `unigram_tsv`,
+  - existing aliases retained for SentencePiece/tiktoken (`model_file`, `encoding_file`).
+- Updated `src/io.jl` docstring examples and error contract text accordingly.
+
+#### Public loader coherence decision
+- Chosen direction: keep classic loaders public.
+- Exported in `src/KeemenaSubwords.jl`:
+  - `load_bpe`
+  - `load_bytebpe`
+  - `load_unigram`
+- Added them to API docs in `docs/src/api.md`.
+
+#### Docs drift fixes and byte-level UX clarification
+- Updated `docs/src/formats.md`:
+  - canonical named-spec keys now reflect `path` for single-file formats and alias notes,
+  - added a new **Byte-level behavior** subsection clarifying:
+    - which formats are byte-level vs non-byte-level,
+    - practical encode/decode expectations,
+    - HF `tokenizer.json` ByteLevel interaction.
+- Updated `docs/src/loading_local.md` examples to use canonical `path`-based specs with alias note.
+
+#### Regression guardrails
+- Expanded `tools/check_docs_examples.jl` with section-16 contract checks:
+  - validates that `docs/src/formats.md` named-spec keys are supported by `load_tokenizer(spec)` parsing,
+  - fails when docs code blocks reference non-exported Keemena APIs (unless module-qualified),
+  - keeps prior wrong-pairing checks (for example GPT2 BPE with `vocab.txt`).
+- Added section-16 tests in `test/runtests.jl`:
+  - named-spec alias equivalence tests (`path` vs alias keys),
+  - format-detection precedence test (`tokenizer.json` preferred over co-present `vocab.json` + `merges.txt`),
+  - override test (`format=:bpe_gpt2` still routes correctly),
+  - smoke tests for public classic loaders (`load_bpe`, `load_bytebpe`, `load_unigram`).
+- Updated test suite label to `KeemenaSubwords sections 1-16`.
+
+### Verification
+- Ran: `LC_ALL=C grep -nP "[^\\x00-\\x7F]" .github/workflows/CI.yml`
+  - Result: no non-ASCII characters found.
+- Ran: `julia --project=. tools/sync_readme_models.jl --check`
+  - Result: README/docs generated sections in sync.
+- Ran: `julia --project=. tools/check_docs_examples.jl`
+  - Result: docs contract checks passed.
+- Ran: `julia --project=. -e 'using Pkg; Pkg.test()'`
+  - Result: `222/222` tests passed (`KeemenaSubwords sections 1-16`).
+- Ran: `julia --project=docs docs/make.jl`
+  - Result: docs build/doctests passed; deploy skipped locally as expected.
+
+### Notes
+- This iteration explicitly formalizes Julia `1.10+` as the supported baseline in both compat and CI.
+- Docs and API contracts now use a stable canonical spec pattern while remaining backward-compatible for existing user code.

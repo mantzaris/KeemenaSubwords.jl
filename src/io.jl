@@ -125,11 +125,15 @@ Load tokenizer from a named specification.
 
 Examples:
 - `(format=:wordpiece, path="/.../vocab.txt")`
+- `(format=:hf_tokenizer_json, path="/.../tokenizer.json")`
+- `(format=:unigram, path="/.../unigram.tsv")`
 - `(format=:bpe_gpt2, vocab_json="/.../vocab.json", merges_txt="/.../merges.txt")`
 - `(format=:bpe_encoder, encoder_json="/.../encoder.json", vocab_bpe="/.../vocab.bpe")`
-- `(format=:sentencepiece_model, model_file="/.../tokenizer.model")`
-- `(format=:tiktoken, encoding_file="/.../o200k_base.tiktoken")`
-- `(format=:hf_tokenizer_json, tokenizer_json="/.../tokenizer.json")`
+- `(format=:wordpiece, vocab_txt="/.../vocab.txt")` (alias)
+- `(format=:sentencepiece_model, model_file="/.../tokenizer.model")` (alias)
+- `(format=:tiktoken, encoding_file="/.../o200k_base.tiktoken")` (alias)
+- `(format=:hf_tokenizer_json, tokenizer_json="/.../tokenizer.json")` (alias)
+- `(format=:unigram, unigram_tsv="/.../unigram.tsv")` (alias)
 """
 function load_tokenizer(spec::NamedTuple; kwargs...)::AbstractSubwordTokenizer
     haskey(spec, :format) || throw(ArgumentError("Tokenizer spec must include :format"))
@@ -155,6 +159,14 @@ function load_tokenizer(spec::NamedTuple; kwargs...)::AbstractSubwordTokenizer
         return load_hf_tokenizer_json(String(spec[:tokenizer_json]); kwargs...)
     end
 
+    if haskey(spec, :vocab_txt)
+        return load_wordpiece(String(spec[:vocab_txt]); kwargs...)
+    end
+
+    if haskey(spec, :unigram_tsv)
+        return load_unigram(String(spec[:unigram_tsv]); kwargs...)
+    end
+
     if haskey(spec, :model_file)
         return load_sentencepiece(String(spec[:model_file]); kwargs...)
     end
@@ -165,7 +177,7 @@ function load_tokenizer(spec::NamedTuple; kwargs...)::AbstractSubwordTokenizer
 
     throw(ArgumentError(
         "Tokenizer spec requires one of: :path, (:vocab,:merges), (:vocab_json,:merges_txt), " *
-        "(:encoder_json,:vocab_bpe), :tokenizer_json, :model_file, or :encoding_file.",
+        "(:encoder_json,:vocab_bpe), :vocab_txt, :unigram_tsv, :tokenizer_json, :model_file, or :encoding_file.",
     ))
 end
 

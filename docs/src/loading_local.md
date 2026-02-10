@@ -2,6 +2,11 @@
 
 Use explicit loader functions when you know the file contract. Use `load_tokenizer(path; format=:auto)` only when auto-detection is preferred.
 
+Named-spec convention:
+- use `path` as the canonical key for single-file formats,
+- keep format-specific pair keys for multi-file formats (`vocab_json` + `merges_txt`, `encoder_json` + `vocab_bpe`).
+- backward-compatible aliases (`vocab_txt`, `model_file`, `encoding_file`, `tokenizer_json`) are still accepted.
+
 ## 1) GPT-2 / RoBERTa style BPE (`vocab.json` + `merges.txt`)
 
 ```julia
@@ -35,7 +40,7 @@ wp = load_wordpiece("/path/to/vocab.txt"; continuation_prefix="##")
 # register via canonical key
 register_local_model!(
     :my_wordpiece,
-    (format=:wordpiece_vocab, vocab_txt="/path/to/vocab.txt");
+    (format=:wordpiece_vocab, path="/path/to/vocab.txt");
     description="local WordPiece",
 )
 ```
@@ -51,7 +56,7 @@ sp_auto = load_sentencepiece("/path/to/tokenizer.model"; kind=:auto)
 sp_uni = load_sentencepiece("/path/to/spm.model"; kind=:unigram)
 sp_bpe = load_sentencepiece("/path/to/tokenizer.model.v3"; kind=:bpe)
 
-register_local_model!(:my_sp, (format=:sentencepiece_model, model_file="/path/to/tokenizer.model"))
+register_local_model!(:my_sp, (format=:sentencepiece_model, path="/path/to/tokenizer.model"))
 ```
 
 ## 6) tiktoken (`*.tiktoken` or text `tokenizer.model`)
@@ -60,7 +65,7 @@ register_local_model!(:my_sp, (format=:sentencepiece_model, model_file="/path/to
 tt = load_tiktoken("/path/to/o200k_base.tiktoken")
 llama3_style = load_tokenizer("/path/to/tokenizer.model"; format=:tiktoken)
 
-register_local_model!(:my_tiktoken, (format=:tiktoken, encoding_file="/path/to/tokenizer.model"))
+register_local_model!(:my_tiktoken, (format=:tiktoken, path="/path/to/tokenizer.model"))
 ```
 
 ## 7) Hugging Face `tokenizer.json`
@@ -68,7 +73,7 @@ register_local_model!(:my_tiktoken, (format=:tiktoken, encoding_file="/path/to/t
 ```julia
 hf = load_hf_tokenizer_json("/path/to/tokenizer.json")
 
-register_local_model!(:my_hf, (format=:hf_tokenizer_json, tokenizer_json="/path/to/tokenizer.json"))
+register_local_model!(:my_hf, (format=:hf_tokenizer_json, path="/path/to/tokenizer.json"))
 ```
 
 ## 8) Generic auto-detect + override

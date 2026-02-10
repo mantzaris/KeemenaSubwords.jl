@@ -3,8 +3,11 @@
 ## Explicit Loader APIs
 
 ```@docs
+load_bpe
+load_bytebpe
 load_bpe_gpt2
 load_bpe_encoder
+load_unigram
 load_wordpiece
 load_sentencepiece
 load_tiktoken

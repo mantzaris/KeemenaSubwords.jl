@@ -1,9 +1,12 @@
 #!/usr/bin/env julia
 
+using KeemenaSubwords
+
 const ROOT = normpath(joinpath(@__DIR__, ".."))
 const README_PATH = joinpath(ROOT, "README.md")
 const DOCS_SRC = joinpath(ROOT, "docs", "src")
 const SRC_DIR = joinpath(ROOT, "src")
+const FORMATS_MD = joinpath(DOCS_SRC, "formats.md")
 
 function _markdown_files()::Vector{String}
     files = String[README_PATH]
@@ -44,10 +47,38 @@ function _push_block_error!(
     return nothing
 end
 
+function _looks_like_keemena_api(fn::AbstractString)::Bool
+    fn == "tokenize" && return true
+    fn == "encode" && return true
+    fn == "decode" && return true
+    fn == "model_path" && return true
+
+    for prefix in (
+        "load_",
+        "detect_",
+        "register_",
+        "install_",
+        "available_",
+        "describe_",
+        "prefetch_",
+        "recommended_",
+        "train_",
+        "save_",
+        "export_",
+        "keemena_",
+        "level_",
+    )
+        startswith(fn, prefix) && return true
+    end
+
+    return false
+end
+
 function _check_code_block!(errors::Vector{String}, file::String, block::String, idx::Int)::Nothing
     for raw_line in split(block, '\n')
         line = strip(raw_line)
         isempty(line) && continue
+        startswith(line, "#") && continue
 
         if occursin(r"format\s*=\s*:bpe_gpt2", line) && occursin(r"vocab\.txt", line)
             _push_block_error!(
@@ -106,7 +137,57 @@ function _check_code_block!(errors::Vector{String}, file::String, block::String,
                 "found WordPiece format paired with BPE files; expected vocab.txt",
             )
         end
+
+        for m in eachmatch(r"\b([A-Za-z_][A-Za-z0-9_!]*)\s*\(", line)
+            fn = String(m.captures[1])
+            _looks_like_keemena_api(fn) || continue
+            occursin("KeemenaSubwords.$fn(", line) && continue
+            if !Base.isexported(KeemenaSubwords, Symbol(fn))
+                _push_block_error!(
+                    errors,
+                    file,
+                    idx,
+                    "docs reference non-exported function $fn(...); export it or module-qualify it",
+                )
+            end
+        end
     end
+    return nothing
+end
+
+function _check_formats_named_spec_keys!(errors::Vector{String})::Nothing
+    supported = Set([
+        "path",
+        "vocab",
+        "merges",
+        "vocab_json",
+        "merges_txt",
+        "encoder_json",
+        "vocab_bpe",
+        "vocab_txt",
+        "unigram_tsv",
+        "tokenizer_json",
+        "model_file",
+        "encoding_file",
+    ])
+
+    for (lineno, raw_line) in enumerate(eachline(FORMATS_MD))
+        line = strip(raw_line)
+        startswith(line, "| `:") || continue
+        parts = split(line, '|')
+        length(parts) >= 6 || continue
+        keys_col = strip(parts[5])
+        for m in eachmatch(r"`([a-z_]+)`", keys_col)
+            key = String(m.captures[1])
+            if !(key in supported)
+                push!(
+                    errors,
+                    "docs/src/formats.md:$lineno: named-spec key `$key` is not supported by load_tokenizer(spec)",
+                )
+            end
+        end
+    end
+
     return nothing
 end
 
@@ -159,6 +240,8 @@ function main()::Nothing
             end
         end
     end
+
+    _check_formats_named_spec_keys!(errors)
 
     if isempty(errors)
         println("Docs examples passed consistency checks.")
