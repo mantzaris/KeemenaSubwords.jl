@@ -4,7 +4,7 @@ using KeemenaSubwords
 const FIXTURES_DIR = joinpath(@__DIR__, "fixtures")
 fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
 
-@testset "KeemenaSubwords sections 1-16" begin
+@testset "KeemenaSubwords sections 1-17" begin
     @testset "Model registry" begin
         names = available_models()
         @test :core_bpe_en in names
@@ -587,4 +587,63 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
         @test load_bytebpe(fixture("bpe")) isa ByteBPETokenizer
         @test load_unigram(fixture("unigram")) isa UnigramTokenizer
     end
+
+    @testset "Section 17 structured outputs and file specs" begin
+        wp = load_tokenizer(:core_wordpiece_en)
+        result = encode_result(wp, "hello world"; add_special_tokens=false, return_offsets=true, return_masks=true)
+        @test result isa TokenizationResult
+        @test result.ids == encode(wp, "hello world"; add_special_tokens=false)
+        @test result.tokens == tokenize(wp, "hello world")
+        @test result.offsets !== nothing
+        @test length(result.offsets) == length(result.ids)
+        @test result.attention_mask == fill(1, length(result.ids))
+        @test result.token_type_ids == fill(0, length(result.ids))
+        @test result.special_tokens_mask == fill(0, length(result.ids))
+        @test result.metadata.format == :wordpiece
+
+        hf = load_tokenizer(fixture("hf_json_wordpiece"); format=:hf_tokenizer_json)
+        hf_result = encode_result(hf, "hello world"; add_special_tokens=true, return_offsets=true, return_masks=true)
+        @test hf_result.ids == encode(hf, "hello world"; add_special_tokens=true)
+        @test hf_result.offsets === nothing
+        @test hf_result.attention_mask == fill(1, length(hf_result.ids))
+        @test length(hf_result.special_tokens_mask) == length(hf_result.ids)
+        @test sum(hf_result.special_tokens_mask) >= 2
+
+        batch = encode_batch_result(wp, ["hello world", "hello keemena"]; return_masks=true)
+        @test length(batch) == 2
+        @test batch[1] isa TokenizationResult
+
+        hf_added = load_hf_tokenizer_json(fixture("hf_json_added_tokens", "tokenizer.json"))
+        city_id = token_to_id(hf_added, "<CITY>")
+        @test city_id in encode(hf_added, "I love <CITY> !")
+        @test !(city_id in encode(hf_added, "xx<CITY>yy"))  # single_word boundary should block match
+
+        spec = FilesSpec(
+            format=:bpe_gpt2,
+            vocab_json=fixture("bpe_gpt2", "vocab.json"),
+            merges_txt=fixture("bpe_gpt2", "merges.txt"),
+        )
+        tok = load_tokenizer(spec)
+        @test tok isa ByteBPETokenizer
+
+        local_key = :local_filespec_bpe
+        register_local_model!(
+            local_key,
+            spec;
+            description="FilesSpec local registration",
+            family=:local,
+        )
+        loaded = load_tokenizer(local_key; prefetch=false)
+        @test loaded isa ByteBPETokenizer
+
+        # Additional precedence hardening in mixed directories.
+        mixed = mktempdir()
+        cp(fixture("bpe_encoder", "encoder.json"), joinpath(mixed, "encoder.json"))
+        cp(fixture("bpe_encoder", "vocab.bpe"), joinpath(mixed, "vocab.bpe"))
+        cp(fixture("bpe_gpt2", "vocab.json"), joinpath(mixed, "vocab.json"))
+        cp(fixture("bpe_gpt2", "merges.txt"), joinpath(mixed, "merges.txt"))
+        @test detect_tokenizer_format(mixed) == :bpe_gpt2
+    end
+
+    include("test_goldens.jl")
 end

@@ -82,3 +82,15 @@ register_local_model!(:my_hf, (format=:hf_tokenizer_json, path="/path/to/tokeniz
 auto_tok = load_tokenizer("/path/to/model_dir")
 forced = load_tokenizer("/path/to/tokenizer.model"; format=:tiktoken)
 ```
+
+## 9) Explicit `FilesSpec` objects
+
+```julia
+spec = FilesSpec(
+    format=:bpe_gpt2,
+    vocab_json="/path/to/vocab.json",
+    merges_txt="/path/to/merges.txt",
+)
+tok = load_tokenizer(spec)
+register_local_model!(:my_bpe, spec; description="explicit file spec")
+```

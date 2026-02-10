@@ -37,5 +37,16 @@ load_tiktoken("/path/to/o200k_base.tiktoken")
 load_hf_tokenizer_json("/path/to/tokenizer.json")
 ```
 
+## Structured encode outputs
+
+```julia
+tok = load_tokenizer(:core_wordpiece_en)
+result = encode_result(tok, "hello world"; add_special_tokens=false, return_offsets=true, return_masks=true)
+
+result.ids
+result.tokens
+result.offsets  # normalized-text coordinates when available
+```
+
 For complete local path recipes, see [Loading Tokenizers From Local Paths](loading_local.md).
 For explicit file contracts and named-spec keys, see [Tokenizer Formats and Required Files](formats.md).

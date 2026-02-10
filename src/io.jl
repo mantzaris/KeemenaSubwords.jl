@@ -182,6 +182,274 @@ function load_tokenizer(spec::NamedTuple; kwargs...)::AbstractSubwordTokenizer
 end
 
 """
+Load tokenizer from a `FilesSpec`.
+"""
+function load_tokenizer(spec::FilesSpec; kwargs...)::AbstractSubwordTokenizer
+    return load_tokenizer(_filespec_to_namedtuple(spec); kwargs...)
+end
+
+function _filespec_to_namedtuple(spec::FilesSpec)::NamedTuple
+    pairs = Pair{Symbol,Any}[:format => spec.format]
+    _push_filespec_pair!(pairs, :path, spec.path)
+    _push_filespec_pair!(pairs, :vocab, spec.vocab)
+    _push_filespec_pair!(pairs, :merges, spec.merges)
+    _push_filespec_pair!(pairs, :vocab_json, spec.vocab_json)
+    _push_filespec_pair!(pairs, :merges_txt, spec.merges_txt)
+    _push_filespec_pair!(pairs, :encoder_json, spec.encoder_json)
+    _push_filespec_pair!(pairs, :vocab_bpe, spec.vocab_bpe)
+    _push_filespec_pair!(pairs, :vocab_txt, spec.vocab_txt)
+    _push_filespec_pair!(pairs, :unigram_tsv, spec.unigram_tsv)
+    _push_filespec_pair!(pairs, :tokenizer_json, spec.tokenizer_json)
+    _push_filespec_pair!(pairs, :model_file, spec.model_file)
+    _push_filespec_pair!(pairs, :encoding_file, spec.encoding_file)
+    return _namedtuple_from_pairs(pairs)
+end
+
+function _push_filespec_pair!(pairs::Vector{Pair{Symbol,Any}}, key::Symbol, value::Union{Nothing,String})::Nothing
+    value === nothing || push!(pairs, key => value)
+    return nothing
+end
+
+function _namedtuple_from_pairs(pairs::Vector{Pair{Symbol,Any}})::NamedTuple
+    return (; pairs...)
+end
+
+function encode_result(
+    tokenizer::AbstractSubwordTokenizer,
+    text::AbstractString;
+    add_special_tokens::Bool=true,
+    return_offsets::Bool=false,
+    return_masks::Bool=false,
+)::TokenizationResult
+    raw_text = String(text)
+    ids = encode(tokenizer, raw_text; add_special_tokens=add_special_tokens)
+    tokens = String[id_to_token(tokenizer, id) for id in ids]
+
+    offsets = return_offsets ? _encode_result_offsets(tokenizer, raw_text, ids; add_special_tokens=add_special_tokens) : nothing
+    attention_mask = return_masks ? fill(1, length(ids)) : nothing
+    token_type_ids = return_masks ? fill(0, length(ids)) : nothing
+    special_tokens_mask = return_masks ? _special_tokens_mask(tokenizer, ids) : nothing
+    info = model_info(tokenizer)
+
+    metadata = (
+        format = info.format,
+        model_name = info.model_name,
+        add_special_tokens = add_special_tokens,
+        offsets_coordinates = :normalized,
+    )
+
+    return TokenizationResult(
+        ids,
+        tokens,
+        offsets,
+        attention_mask,
+        token_type_ids,
+        special_tokens_mask,
+        metadata,
+    )
+end
+
+"""
+Batch variant of `encode_result`.
+"""
+function encode_batch_result(
+    tokenizer::AbstractSubwordTokenizer,
+    texts::AbstractVector{<:AbstractString};
+    kwargs...,
+)::Vector{TokenizationResult}
+    return [encode_result(tokenizer, text; kwargs...) for text in texts]
+end
+
+function _special_tokens_mask(
+    tokenizer::AbstractSubwordTokenizer,
+    ids::AbstractVector{Int},
+)::Vector{Int}
+    special_ids = Set(values(special_tokens(tokenizer)))
+    return [id in special_ids ? 1 : 0 for id in ids]
+end
+
+function _encode_result_offsets(
+    tokenizer::AbstractSubwordTokenizer,
+    text::String,
+    ids::Vector{Int};
+    add_special_tokens::Bool,
+)::Union{Nothing,Vector{Tuple{Int,Int}}}
+    base_ids = encode(tokenizer, text; add_special_tokens=false)
+    base_tokens = tokenize(tokenizer, text)
+
+    length(base_tokens) == length(base_ids) || return nothing
+    base_offsets = _token_offsets_for_tokens(tokenizer, normalize_text(text), base_tokens)
+    base_offsets === nothing && return nothing
+
+    if !add_special_tokens
+        ids == base_ids || return nothing
+        return base_offsets
+    end
+
+    return _inject_special_offsets(ids, base_ids, base_offsets)
+end
+
+_token_offsets_for_tokens(::AbstractSubwordTokenizer, ::String, ::Vector{String}) = nothing
+
+function _token_offsets_for_tokens(
+    tokenizer::WordPieceTokenizer,
+    normalized::String,
+    tokens::Vector{String},
+)::Union{Nothing,Vector{Tuple{Int,Int}}}
+    function _strip_wordpiece(piece::String)::String
+        if startswith(piece, tokenizer.continuation_prefix)
+            start_idx = nextind(piece, firstindex(piece), length(tokenizer.continuation_prefix))
+            start_idx > lastindex(piece) && return ""
+            return String(SubString(piece, start_idx))
+        end
+        return piece
+    end
+
+    return _wordwise_piece_offsets(
+        normalized,
+        tokenizer,
+        tokens;
+        unk_token=tokenizer.unk_token,
+        strip_token=_strip_wordpiece,
+    )
+end
+
+function _token_offsets_for_tokens(
+    tokenizer::BPETokenizer,
+    normalized::String,
+    tokens::Vector{String},
+)::Union{Nothing,Vector{Tuple{Int,Int}}}
+    marker = tokenizer.end_of_word_marker
+    strip_piece = marker === nothing ?
+        (piece -> piece) :
+        (piece -> replace(piece, marker => ""))
+
+    return _wordwise_piece_offsets(
+        normalized,
+        tokenizer,
+        tokens;
+        unk_token=tokenizer.unk_token,
+        strip_token=strip_piece,
+    )
+end
+
+function _token_offsets_for_tokens(
+    tokenizer::UnigramTokenizer,
+    normalized::String,
+    tokens::Vector{String},
+)::Union{Nothing,Vector{Tuple{Int,Int}}}
+    isempty(tokenizer.whitespace_marker) || return nothing
+    return _wordwise_piece_offsets(
+        normalized,
+        tokenizer,
+        tokens;
+        unk_token=tokenizer.unk_token,
+        strip_token=piece -> piece,
+    )
+end
+
+function _wordwise_piece_offsets(
+    normalized::String,
+    tokenizer,
+    tokens::Vector{String};
+    unk_token::String,
+    strip_token::Function,
+)::Union{Nothing,Vector{Tuple{Int,Int}}}
+    offsets = Tuple{Int,Int}[]
+    token_idx = 1
+
+    for (start_idx, stop_idx, word) in _word_spans(normalized)
+        pieces = tokenize(tokenizer, word)
+        token_idx + length(pieces) - 1 <= length(tokens) || return nothing
+        local_end = _advance_chars(normalized, start_idx, length(word))
+        cursor = start_idx
+
+        for piece in pieces
+            current = tokens[token_idx]
+            current == piece || return nothing
+
+            if piece == unk_token
+                push!(offsets, (start_idx, local_end))
+                cursor = local_end
+                token_idx += 1
+                continue
+            end
+
+            clean = strip_token(piece)
+            span_len = length(clean)
+            next_cursor = span_len == 0 ? cursor : _advance_chars(normalized, cursor, span_len)
+            push!(offsets, (cursor, next_cursor))
+            cursor = next_cursor
+            token_idx += 1
+        end
+
+        cursor <= local_end || return nothing
+    end
+
+    token_idx == length(tokens) + 1 || return nothing
+    return offsets
+end
+
+function _word_spans(text::String)::Vector{Tuple{Int,Int,String}}
+    spans = Tuple{Int,Int,String}[]
+    for m in eachmatch(r"\S+", text)
+        start_idx = m.offset
+        count = length(m.match)
+        end_idx = _advance_chars(text, start_idx, count)
+        stop_idx = prevind(text, end_idx)
+        push!(spans, (start_idx, stop_idx, String(m.match)))
+    end
+    return spans
+end
+
+function _advance_chars(text::String, start_idx::Int, count::Int)::Int
+    idx = start_idx
+    for _ in 1:count
+        idx = nextind(text, idx)
+    end
+    return idx
+end
+
+function _inject_special_offsets(
+    all_ids::Vector{Int},
+    base_ids::Vector{Int},
+    base_offsets::Vector{Tuple{Int,Int}},
+)::Union{Nothing,Vector{Tuple{Int,Int}}}
+    isempty(base_ids) && return [(0, 0) for _ in all_ids]
+    length(base_ids) == length(base_offsets) || return nothing
+
+    match_range = _find_subsequence_range(all_ids, base_ids)
+    match_range === nothing && return nothing
+
+    offsets = [(0, 0) for _ in all_ids]
+    start_idx, stop_idx = match_range
+    for (i, base_offset) in enumerate(base_offsets)
+        offsets[start_idx + i - 1] = base_offset
+    end
+
+    stop_idx - start_idx + 1 == length(base_offsets) || return nothing
+    return offsets
+end
+
+function _find_subsequence_range(
+    haystack::Vector{Int},
+    needle::Vector{Int},
+)::Union{Nothing,Tuple{Int,Int}}
+    n = length(needle)
+    m = length(haystack)
+    n == 0 && return (1, 0)
+    n > m && return nothing
+
+    for i in 1:(m - n + 1)
+        @inbounds if haystack[i:(i + n - 1)] == needle
+            return (i, i + n - 1)
+        end
+    end
+
+    return nothing
+end
+
+"""
 Save tokenizer to a canonical on-disk format.
 
 `format=:internal` chooses a tokenizer-family specific default:

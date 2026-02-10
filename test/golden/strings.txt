@@ -1,0 +1,8 @@
+hello world
+hello   world
+Hello, world!
+line1\nline2
+emoji 😀 test
+café
+[CLS] hello [SEP]
+  leading and trailing  

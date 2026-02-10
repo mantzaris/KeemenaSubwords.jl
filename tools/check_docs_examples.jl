@@ -58,6 +58,7 @@ function _looks_like_keemena_api(fn::AbstractString)::Bool
         "detect_",
         "register_",
         "install_",
+        "encode_",
         "available_",
         "describe_",
         "prefetch_",

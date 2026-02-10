@@ -1044,73 +1044,6 @@ Complete plan section `## 15)` with final docs/API consistency polish and deeper
 - Full inventory remains generated from registry metadata; README stays concise and docs-first.
 
 
-## 16) Solidify the current state (docs contracts, CI stability, and public API coherence)
-
-### Objectives
-- Make CI green on the supported Julia versions (or formally raise the minimum Julia version and align CI).
-- Eliminate docs drift: the “Formats” and “Loading Local” pages must match the real exported API and the named-spec contracts.
-- Make byte-level behavior explicit in docs so LLM users understand what they are getting.
-
-### Tasks
-
-#### A) Fix CI failures (highest priority)
-1. Reproduce CI locally on the CI matrix versions:
-   - Julia 1.10 (first) then Julia 1.6 (only if you still intend to support it).
-2. Decide and document minimum supported Julia version:
-   - If you require modern Julia (recommended for tokenization performance and JSON stacks), set Project.toml compat accordingly and remove 1.6 from CI.
-   - If you keep 1.6, patch code/tests for 1.6 compatibility and add version-gated tests where needed.
-3. Remove hidden/bidi Unicode characters from `.github/workflows/CI.yml`:
-   - Rewrite the file in plain ASCII, reindent, and re-commit to remove “hidden Unicode” warnings.
-
-#### B) Resolve API/doc drift for local loading contracts
-4. Unify the named-spec “canonical keys” for single-file formats:
-   - Choose one canonical pattern, recommended:
-     - `path` for single-file formats (wordpiece vocab, unigram.tsv, tokenizer.json, tokenizer.model)
-     - format-specific keys for multi-file formats (vocab_json + merges_txt, encoder_json + vocab_bpe)
-5. Implement backward-compatible aliases (so old docs or user code still works):
-   - For WordPiece:
-     - accept both `path` and `vocab_txt`
-   - For HF tokenizer.json:
-     - accept both `path` and `tokenizer_json`
-   - For Unigram:
-     - accept both `path` and `unigram_tsv` (optional alias, but helpful)
-6. Update docs so every page uses the same canonical keys:
-   - Formats page: update the “Canonical Named Spec Keys” column.
-   - Loading Local page: update examples to match canonical keys.
-   - API reference examples: align them too.
-
-#### C) Make classic BPE / ByteBPE / Unigram loader API consistent
-7. Decide whether `load_bpe`, `load_bytebpe`, `load_unigram` are public:
-   - If public:
-     - export them, add docstrings, and include them in the API reference page.
-     - add at least one unit test per loader.
-   - If not public:
-     - remove them from docs and replace with:
-       - `load_tokenizer(path; format=:bpe)`
-       - `load_tokenizer(path; format=:bytebpe)`
-       - `load_tokenizer(path; format=:unigram)`
-
-#### D) Byte-level documentation tightening (small but high UX value)
-8. Add a short “Byte-level behavior” subsection to docs:
-   - Which formats are byte-level (GPT2/RoBERTa style) vs not (WordPiece, SentencePiece).
-   - What decode/encode guarantees exist per tokenizer type.
-   - How byte-level interacts with HF tokenizer.json pipelines.
-
-#### E) Test coverage improvements to prevent regressions
-9. Add tests that enforce doc-contract stability:
-   - Named-spec alias tests: `path` and the format-specific key must both work where intended.
-   - Format detection precedence tests (directory with both tokenizer.json and vocab/merges should pick tokenizer.json unless overridden).
-10. Add a small “docs-contract check” script or test that fails if:
-   - docs Formats table lists keys not supported by `load_tokenizer` named-spec parsing
-   - docs reference non-exported functions (unless explicitly module-qualified)
-
-### Implementation order
-1) CI green + workflow unicode cleanup
-2) Named-spec canonical keys + alias support
-3) Docs updates for formats/loading-local/api examples
-4) Loader API decision for load_bpe/load_bytebpe/load_unigram and tests
-5) Byte-level doc subsection + tests for detection and aliases
-
 ## 2026-02-10 - Iteration 16
 
 ### Objective
@@ -1181,3 +1114,86 @@ Complete plan section `## 16)` by stabilizing CI/version policy, aligning local-
 ### Notes
 - This iteration explicitly formalizes Julia `1.10+` as the supported baseline in both compat and CI.
 - Docs and API contracts now use a stable canonical spec pattern while remaining backward-compatible for existing user code.
+
+## 2026-02-10 - Iteration 17
+
+### Objective
+Implement section `## 17)` hardening work for conformance, structured outputs, and robust bring-your-own-files workflows while keeping runtime Python-free and preserving existing APIs.
+
+### Completed section-17 implementation
+
+#### Conformance golden framework
+- Added committed golden conformance assets under `test/golden/`:
+  - `test/golden/core_bpe_en.json`
+  - `test/golden/core_wordpiece_en.json`
+  - `test/golden/core_sentencepiece_unigram_en.json`
+  - `test/golden/fixture_bpe_gpt2.json`
+  - `test/golden/fixture_hf_json_wordpiece.json`
+  - `test/golden/fixture_tiktoken_model.json`
+  - shared string corpus file `test/golden/strings.txt`
+- Added Julia golden runner `test/test_goldens.jl`:
+  - loads tokenizer via public APIs (symbol key or local path + format),
+  - compares `encode` ids exactly,
+  - optionally checks tokens and decode outputs,
+  - emits first-mismatch diagnostics with local windows.
+- Integrated runner into main test suite (`test/runtests.jl`) as `Section 17 golden conformance`.
+
+#### Maintainer-only golden generator (optional Python tooling)
+- Added optional tooling under `tools/generate_goldens/`:
+  - `tools/generate_goldens/requirements.txt`
+  - `tools/generate_goldens/generate_goldens.py`
+  - `tools/generate_goldens/README.md`
+- This tooling is not used by runtime or CI tests; committed JSON goldens remain the source of truth for test execution.
+
+#### Structured encode output API (non-breaking)
+- Added public `TokenizationResult` struct in `src/types.jl`.
+- Added public APIs in `src/io.jl`:
+  - `encode_result(tokenizer, text; add_special_tokens=true, return_offsets=false, return_masks=false)`
+  - `encode_batch_result(tokenizer, texts; kwargs...)`
+- Kept existing `encode(tokenizer, text; ...) -> Vector{Int}` unchanged.
+- Added best-effort normalized-coordinate offsets for:
+  - `WordPieceTokenizer`
+  - `BPETokenizer`
+  - `UnigramTokenizer` (when whitespace marker is empty)
+- For ambiguous pipelines (for example HF JSON/byte-level), offsets return `nothing` by design.
+- Added masks in structured output when requested:
+  - `attention_mask`
+  - `token_type_ids`
+  - `special_tokens_mask`
+
+#### BYO files hardening and internal file-spec standardization
+- Added internal/public `FilesSpec` struct (`src/types.jl`) to represent single-file and multi-file tokenizer layouts.
+- Added `load_tokenizer(spec::FilesSpec)` (`src/io.jl`) by converting to canonical NamedTuple contract.
+- Added `register_local_model!(key, spec::FilesSpec; ...)` (`src/models.jl`) delegating to existing persisted local registry flow.
+- Preserved backward compatibility with existing NamedTuple specs and aliases.
+
+#### Public API and docs alignment
+- Exported new API symbols in `src/KeemenaSubwords.jl`:
+  - `TokenizationResult`
+  - `FilesSpec`
+  - `encode_result`
+  - `encode_batch_result`
+- Updated API docs discoverability (`docs/src/api.md`) and loading examples:
+  - structured output example in `docs/src/loading.md`
+  - `FilesSpec` usage example in `docs/src/loading_local.md`
+
+#### Additional section-17 regression tests
+- Added `Section 17 structured outputs and file specs` in `test/runtests.jl` covering:
+  - `encode_result` ids/tokens/offsets/masks behavior,
+  - `encode_batch_result` behavior,
+  - `FilesSpec` load/register flows,
+  - additional detection precedence checks for mixed-format directories.
+- Updated top-level test label to `KeemenaSubwords sections 1-17`.
+
+### Verification
+- Ran: `julia --project=. tools/check_docs_examples.jl`
+  - Result: docs contract checks passed.
+- Ran: `julia --project=. -e 'using Pkg; Pkg.test()'`
+  - Result: `332/332` tests passed (`KeemenaSubwords sections 1-17`).
+- Ran: `julia --project=docs docs/make.jl`
+  - Result: docs build/doctests passed (deploy skipped locally as expected).
+
+### Notes
+- HF tokenizer.json core compliance expansions from section 15 are now backed by additional conformance goldens and section-17 regression coverage.
+- Python remains optional and maintainer-only for golden regeneration; runtime/test execution remains Julia-only.
+

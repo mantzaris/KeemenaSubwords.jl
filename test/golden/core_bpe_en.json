@@ -1,0 +1,61 @@
+{
+  "name": "Core BPE EN",
+  "format": "bpe",
+  "source": {
+    "kind": "key",
+    "value": "core_bpe_en"
+  },
+  "settings": {
+    "add_special_tokens": false
+  },
+  "cases": [
+    {
+      "text": "hello world",
+      "expected_ids": [24, 29],
+      "expected_tokens": ["hello</w>", "world</w>"],
+      "expected_decoded": "hello world"
+    },
+    {
+      "text": "hello   world",
+      "expected_ids": [24, 29],
+      "expected_tokens": ["hello</w>", "world</w>"],
+      "expected_decoded": "hello world"
+    },
+    {
+      "text": "Hello, world!",
+      "expected_ids": [1, 1],
+      "expected_tokens": ["<unk>", "<unk>"],
+      "expected_decoded": "<unk><unk>"
+    },
+    {
+      "text": "line1\nline2",
+      "expected_ids": [1, 1],
+      "expected_tokens": ["<unk>", "<unk>"],
+      "expected_decoded": "<unk><unk>"
+    },
+    {
+      "text": "emoji 😀 test",
+      "expected_ids": [1, 1, 1],
+      "expected_tokens": ["<unk>", "<unk>", "<unk>"],
+      "expected_decoded": "<unk><unk><unk>"
+    },
+    {
+      "text": "café",
+      "expected_ids": [1],
+      "expected_tokens": ["<unk>"],
+      "expected_decoded": "<unk>"
+    },
+    {
+      "text": "[CLS] hello [SEP]",
+      "expected_ids": [1, 24, 1],
+      "expected_tokens": ["<unk>", "hello</w>", "<unk>"],
+      "expected_decoded": "<unk>hello <unk>"
+    },
+    {
+      "text": "  leading and trailing  ",
+      "expected_ids": [1, 16, 15, 12, 5, 1],
+      "expected_tokens": ["<unk>", "a", "n", "d", "</w>", "<unk>"],
+      "expected_decoded": "<unk>and <unk>"
+    }
+  ]
+}

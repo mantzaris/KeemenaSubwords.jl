@@ -1,0 +1,44 @@
+{
+  "name": "Fixture tiktoken model file",
+  "format": "tiktoken",
+  "source": {
+    "kind": "path",
+    "value": "fixtures/tiktoken_model/tokenizer.model",
+    "format": "tiktoken"
+  },
+  "settings": {
+    "add_special_tokens": false
+  },
+  "cases": [
+    {
+      "text": "hi",
+      "expected_ids": [2, 3],
+      "expected_tokens": ["b64:aA==", "b64:aQ=="],
+      "expected_decoded": "hi"
+    },
+    {
+      "text": "hello",
+      "expected_ids": [2, 6, 4, 4, 5],
+      "expected_tokens": ["b64:aA==", "b64:ZQ==", "b64:bA==", "b64:bA==", "b64:bw=="],
+      "expected_decoded": "hello"
+    },
+    {
+      "text": "hi hi",
+      "expected_ids": [2, 3, 1, 2, 3],
+      "expected_tokens": ["b64:aA==", "b64:aQ==", "b64:IA==", "b64:aA==", "b64:aQ=="],
+      "expected_decoded": "hi hi"
+    },
+    {
+      "text": "hello hi",
+      "expected_ids": [2, 6, 4, 4, 5, 1, 2, 3],
+      "expected_tokens": ["b64:aA==", "b64:ZQ==", "b64:bA==", "b64:bA==", "b64:bw==", "b64:IA==", "b64:aA==", "b64:aQ=="],
+      "expected_decoded": "hello hi"
+    },
+    {
+      "text": "hi hello",
+      "expected_ids": [2, 3, 1, 2, 6, 4, 4, 5],
+      "expected_tokens": ["b64:aA==", "b64:aQ==", "b64:IA==", "b64:aA==", "b64:ZQ==", "b64:bA==", "b64:bA==", "b64:bw=="],
+      "expected_decoded": "hi hello"
+    }
+  ]
+}

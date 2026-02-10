@@ -1,0 +1,61 @@
+{
+  "name": "Core SentencePiece Unigram EN",
+  "format": "sentencepiece_model",
+  "source": {
+    "kind": "key",
+    "value": "core_sentencepiece_unigram_en"
+  },
+  "settings": {
+    "add_special_tokens": false
+  },
+  "cases": [
+    {
+      "text": "hello world",
+      "expected_ids": [4, 5],
+      "expected_tokens": ["▁hello", "▁world"],
+      "expected_decoded": "hello world"
+    },
+    {
+      "text": "hello   world",
+      "expected_ids": [4, 5],
+      "expected_tokens": ["▁hello", "▁world"],
+      "expected_decoded": "hello world"
+    },
+    {
+      "text": "Hello, world!",
+      "expected_ids": [1, 1],
+      "expected_tokens": ["<unk>", "<unk>"],
+      "expected_decoded": "<unk><unk>"
+    },
+    {
+      "text": "line1\nline2",
+      "expected_ids": [1, 1],
+      "expected_tokens": ["<unk>", "<unk>"],
+      "expected_decoded": "<unk><unk>"
+    },
+    {
+      "text": "emoji 😀 test",
+      "expected_ids": [1, 1, 1],
+      "expected_tokens": ["<unk>", "<unk>", "<unk>"],
+      "expected_decoded": "<unk><unk><unk>"
+    },
+    {
+      "text": "café",
+      "expected_ids": [1],
+      "expected_tokens": ["<unk>"],
+      "expected_decoded": "<unk>"
+    },
+    {
+      "text": "[CLS] hello [SEP]",
+      "expected_ids": [1, 4, 1],
+      "expected_tokens": ["<unk>", "▁hello", "<unk>"],
+      "expected_decoded": "<unk> hello<unk>"
+    },
+    {
+      "text": "  leading and trailing  ",
+      "expected_ids": [1, 1, 1],
+      "expected_tokens": ["<unk>", "<unk>", "<unk>"],
+      "expected_decoded": "<unk><unk><unk>"
+    }
+  ]
+}

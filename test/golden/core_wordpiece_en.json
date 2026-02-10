@@ -1,0 +1,61 @@
+{
+  "name": "Core WordPiece EN",
+  "format": "wordpiece_vocab",
+  "source": {
+    "kind": "key",
+    "value": "core_wordpiece_en"
+  },
+  "settings": {
+    "add_special_tokens": false
+  },
+  "cases": [
+    {
+      "text": "hello world",
+      "expected_ids": [6, 7],
+      "expected_tokens": ["hello", "world"],
+      "expected_decoded": "hello world"
+    },
+    {
+      "text": "hello   world",
+      "expected_ids": [6, 7],
+      "expected_tokens": ["hello", "world"],
+      "expected_decoded": "hello world"
+    },
+    {
+      "text": "Hello, world!",
+      "expected_ids": [2, 2],
+      "expected_tokens": ["[UNK]", "[UNK]"],
+      "expected_decoded": "[UNK] [UNK]"
+    },
+    {
+      "text": "line1\nline2",
+      "expected_ids": [2, 2],
+      "expected_tokens": ["[UNK]", "[UNK]"],
+      "expected_decoded": "[UNK] [UNK]"
+    },
+    {
+      "text": "emoji 😀 test",
+      "expected_ids": [2, 2, 2],
+      "expected_tokens": ["[UNK]", "[UNK]", "[UNK]"],
+      "expected_decoded": "[UNK] [UNK] [UNK]"
+    },
+    {
+      "text": "café",
+      "expected_ids": [2],
+      "expected_tokens": ["[UNK]"],
+      "expected_decoded": "[UNK]"
+    },
+    {
+      "text": "[CLS] hello [SEP]",
+      "expected_ids": [3, 6, 4],
+      "expected_tokens": ["[CLS]", "hello", "[SEP]"],
+      "expected_decoded": "hello"
+    },
+    {
+      "text": "  leading and trailing  ",
+      "expected_ids": [2, 2, 2],
+      "expected_tokens": ["[UNK]", "[UNK]", "[UNK]"],
+      "expected_decoded": "[UNK] [UNK] [UNK]"
+    }
+  ]
+}

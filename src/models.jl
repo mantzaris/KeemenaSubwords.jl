@@ -709,6 +709,17 @@ function register_local_model!(
 end
 
 """
+Register local model files from a `FilesSpec`.
+"""
+function register_local_model!(
+    key::Symbol,
+    spec::FilesSpec;
+    kwargs...,
+)::Nothing
+    return register_local_model!(key, _filespec_to_namedtuple(spec); kwargs...)
+end
+
+"""
 Deprecated alias kept for compatibility. Use `register_local_model!` instead.
 """
 function register_external_model!(

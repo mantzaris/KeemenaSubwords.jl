@@ -17,6 +17,73 @@ struct TokenizerMetadata
 end
 
 """
+Structured file specification for local tokenizer loading/registration.
+
+Use `path` for single-file formats and explicit pairs for multi-file formats.
+"""
+struct FilesSpec
+    format::Symbol
+    path::Union{Nothing,String}
+    vocab::Union{Nothing,String}
+    merges::Union{Nothing,String}
+    vocab_json::Union{Nothing,String}
+    merges_txt::Union{Nothing,String}
+    encoder_json::Union{Nothing,String}
+    vocab_bpe::Union{Nothing,String}
+    vocab_txt::Union{Nothing,String}
+    unigram_tsv::Union{Nothing,String}
+    tokenizer_json::Union{Nothing,String}
+    model_file::Union{Nothing,String}
+    encoding_file::Union{Nothing,String}
+end
+
+function FilesSpec(;
+    format::Symbol,
+    path=nothing,
+    vocab=nothing,
+    merges=nothing,
+    vocab_json=nothing,
+    merges_txt=nothing,
+    encoder_json=nothing,
+    vocab_bpe=nothing,
+    vocab_txt=nothing,
+    unigram_tsv=nothing,
+    tokenizer_json=nothing,
+    model_file=nothing,
+    encoding_file=nothing,
+)::FilesSpec
+    _as_opt_string(x) = x === nothing ? nothing : String(x)
+    return FilesSpec(
+        format,
+        _as_opt_string(path),
+        _as_opt_string(vocab),
+        _as_opt_string(merges),
+        _as_opt_string(vocab_json),
+        _as_opt_string(merges_txt),
+        _as_opt_string(encoder_json),
+        _as_opt_string(vocab_bpe),
+        _as_opt_string(vocab_txt),
+        _as_opt_string(unigram_tsv),
+        _as_opt_string(tokenizer_json),
+        _as_opt_string(model_file),
+        _as_opt_string(encoding_file),
+    )
+end
+
+"""
+Structured tokenization output for downstream pipelines.
+"""
+struct TokenizationResult
+    ids::Vector{Int}
+    tokens::Vector{String}
+    offsets::Union{Nothing,Vector{Tuple{Int,Int}}}
+    attention_mask::Union{Nothing,Vector{Int}}
+    token_type_ids::Union{Nothing,Vector{Int}}
+    special_tokens_mask::Union{Nothing,Vector{Int}}
+    metadata::NamedTuple
+end
+
+"""
 Convert `TokenizerMetadata` into a stable API-facing named tuple.
 """
 metadata_namedtuple(metadata::TokenizerMetadata)::NamedTuple = (
@@ -58,6 +125,11 @@ Encode text into token IDs.
 function encode(tokenizer::AbstractSubwordTokenizer, text::AbstractString; add_special_tokens::Bool=false)
     throw(MethodError(encode, (tokenizer, text, add_special_tokens)))
 end
+
+"""
+Encode text and return a structured `TokenizationResult`.
+"""
+function encode_result end
 
 """
 Decode token IDs into text.
