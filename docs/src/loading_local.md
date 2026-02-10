@@ -42,6 +42,10 @@ register_local_model!(
 
 ## 5) SentencePiece (`.model`, `.model.v3`, `sentencepiece.bpe.model`)
 
+`load_sentencepiece` accepts either:
+- standard SentencePiece binary model files,
+- or Keemena text-exported SentencePiece files (same filename patterns).
+
 ```julia
 sp_auto = load_sentencepiece("/path/to/tokenizer.model"; kind=:auto)
 sp_uni = load_sentencepiece("/path/to/spm.model"; kind=:unigram)

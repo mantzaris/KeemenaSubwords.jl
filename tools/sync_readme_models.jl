@@ -5,10 +5,10 @@ using KeemenaSubwords
 const README_PATH = normpath(joinpath(@__DIR__, "..", "README.md"))
 const DOCS_MODELS_PATH = normpath(joinpath(@__DIR__, "..", "docs", "src", "models.md"))
 
-const README_FEATURED_START = "<!-- KEEMENA_FEATURED_MODELS_START -->"
-const README_FEATURED_END = "<!-- KEEMENA_FEATURED_MODELS_END -->"
-const DOCS_MODELS_START = "<!-- KEEMENA_MODELS_START -->"
-const DOCS_MODELS_END = "<!-- KEEMENA_MODELS_END -->"
+const README_FEATURED_START = "## Featured Models"
+const README_FEATURED_END = "## Documentation"
+const DOCS_MODELS_START = "The table below is generated from the same registry used by `available_models()` and `describe_model(...)`."
+const DOCS_MODELS_END = "`describe_model(key)` includes provenance metadata such as `license`, `family`, `distribution`, `upstream_repo`, `upstream_ref`, and `upstream_files`."
 
 const FEATURED_MODEL_PRIORITY = [
     :tiktoken_cl100k_base,
@@ -88,10 +88,7 @@ function _render_featured_list(rows)::String
         push!(grouped[format], key)
     end
 
-    lines = String[
-        "_Generated from registry metadata via `tools/sync_readme_models.jl`._",
-        "",
-    ]
+    lines = String["_Generated from registry metadata via `tools/sync_readme_models.jl`._", ""]
 
     for format in format_order
         keys = grouped[format]
@@ -103,10 +100,7 @@ function _render_featured_list(rows)::String
 end
 
 function _render_inventory_table(rows)::String
-    lines = String[
-        "_Generated from the registry by `tools/sync_readme_models.jl` (excluding `:user_local` entries)._",
-        "",
-    ]
+    lines = String["_Generated from the registry by `tools/sync_readme_models.jl` (excluding `:user_local` entries)._", ""]
 
     active_group = nothing
     for row in rows
@@ -148,7 +142,7 @@ function _replace_marked_section(
     pattern = Regex("(?s)" * _regex_escape(start_marker) * ".*?" * _regex_escape(end_marker))
     occursin(pattern, text) || throw(ArgumentError("Missing marker block in $(path): $(start_marker) ... $(end_marker)"))
 
-    replacement = string(start_marker, "\n", content, "\n", end_marker)
+    replacement = string(start_marker, "\n\n", content, "\n\n", end_marker)
     updated = replace(text, pattern => replacement)
 
     if check

@@ -23,6 +23,19 @@ end
 
 """
 Load tokenizer from file system path.
+
+Common `format` contracts:
+- `:hf_tokenizer_json` -> `tokenizer.json`
+- `:bpe_gpt2` -> `vocab.json` + `merges.txt`
+- `:bpe_encoder` -> `encoder.json` + `vocab.bpe`
+- `:wordpiece` / `:wordpiece_vocab` -> `vocab.txt`
+- `:sentencepiece_model` -> `*.model` / `*.model.v3` / `sentencepiece.bpe.model`
+- `:tiktoken` -> `*.tiktoken` or tiktoken-text `tokenizer.model`
+
+Examples:
+- `load_tokenizer("/path/to/model_dir")`
+- `load_tokenizer("/path/to/tokenizer.model"; format=:tiktoken)`
+- `load_tokenizer("/path/to/tokenizer.json"; format=:hf_tokenizer_json)`
 """
 function load_tokenizer(
     path::AbstractString;
@@ -76,6 +89,10 @@ end
 
 """
 Load tokenizer from explicit `(vocab_path, merges_path)` tuple.
+
+This tuple form is for classic BPE/byte-level BPE (`vocab.txt` + `merges.txt`)
+or explicit JSON-pair loaders (`vocab.json` + `merges.txt`, `encoder.json` + `vocab.bpe`)
+when accompanied by `format`.
 """
 function load_tokenizer(
     paths::Tuple{<:AbstractString,<:AbstractString};
@@ -83,6 +100,15 @@ function load_tokenizer(
     kwargs...,
 )::AbstractSubwordTokenizer
     vocab_path, merges_path = paths
+    if format === :bpe_gpt2
+        if lowercase(basename(vocab_path)) == "vocab.txt"
+            return load_bpe(vocab_path, merges_path; kwargs...)
+        end
+        return load_bpe_gpt2(vocab_path, merges_path; kwargs...)
+    elseif format === :bpe_encoder
+        return load_bpe_encoder(vocab_path, merges_path; kwargs...)
+    end
+
     selected_format = _canonical_load_format(format)
 
     if selected_format === :bpe
@@ -91,7 +117,7 @@ function load_tokenizer(
         return load_bytebpe(vocab_path, merges_path; kwargs...)
     end
 
-    throw(ArgumentError("Tuple model path loading supports only :bpe/:bpe_gpt2 and :bytebpe, got: $format"))
+    throw(ArgumentError("Tuple model path loading supports :bpe, :bytebpe, :bpe_gpt2, and :bpe_encoder; got: $format"))
 end
 
 """
@@ -99,7 +125,11 @@ Load tokenizer from a named specification.
 
 Examples:
 - `(format=:wordpiece, path="/.../vocab.txt")`
-- `(format=:bpe_gpt2, vocab="/.../vocab.txt", merges="/.../merges.txt")`
+- `(format=:bpe_gpt2, vocab_json="/.../vocab.json", merges_txt="/.../merges.txt")`
+- `(format=:bpe_encoder, encoder_json="/.../encoder.json", vocab_bpe="/.../vocab.bpe")`
+- `(format=:sentencepiece_model, model_file="/.../tokenizer.model")`
+- `(format=:tiktoken, encoding_file="/.../o200k_base.tiktoken")`
+- `(format=:hf_tokenizer_json, tokenizer_json="/.../tokenizer.json")`
 """
 function load_tokenizer(spec::NamedTuple; kwargs...)::AbstractSubwordTokenizer
     haskey(spec, :format) || throw(ArgumentError("Tokenizer spec must include :format"))

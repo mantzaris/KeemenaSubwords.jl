@@ -33,9 +33,12 @@ function parse_hf_tokenizer_json(path::AbstractString)::HFJSONSpec
     postprocessor = _parse_hf_postprocessor(_json_get(root, "post_processor"), "\$.post_processor")
     decoder = _parse_hf_decoder(_json_get(root, "decoder"), "\$.decoder")
 
-    added_token_ids = _parse_added_token_ids(_json_get(root, "added_tokens"), "\$.added_tokens")
-    special_token_ids = _parse_special_token_ids(_json_get(root, "added_tokens"), "\$.added_tokens")
+    added_tokens = _parse_added_tokens(_json_get(root, "added_tokens"), "\$.added_tokens")
+    added_token_ids = Dict{String,Int}(token.content => token.id for token in added_tokens)
+    special_token_ids = Dict{String,Int}(token.content => token.id for token in added_tokens if token.special)
     _merge_template_special_ids!(special_token_ids, postprocessor)
+    truncation = _parse_hf_truncation(_json_get(root, "truncation"), "\$.truncation")
+    padding = _parse_hf_padding(_json_get(root, "padding"), "\$.padding")
 
     return HFJSONSpec(
         model,
@@ -43,8 +46,11 @@ function parse_hf_tokenizer_json(path::AbstractString)::HFJSONSpec
         pretokenizer,
         postprocessor,
         decoder,
+        added_tokens,
         added_token_ids,
         special_token_ids,
+        truncation,
+        padding,
         resolved_path,
     )
 end
@@ -57,14 +63,35 @@ function _parse_hf_model(model_obj, path::String)::HFJSONModelSpec
         vocab = _parse_vocab_map(_json_get_required(model_obj, "vocab", "$path.vocab"), "$path.vocab")
         merges = _parse_merges(_json_get_required(model_obj, "merges", "$path.merges"), "$path.merges")
         unk_token = _json_get_string(model_obj, "unk_token", "<unk>")
+        continuing_prefix = _json_get_optional_string(model_obj, "continuing_subword_prefix")
         end_suffix = _json_get_string(model_obj, "end_of_word_suffix", "")
         suffix = isempty(end_suffix) ? nothing : end_suffix
-        return HFBPEModelSpec(vocab, merges, unk_token, false, suffix)
+        fuse_unk = _json_get_bool(model_obj, "fuse_unk", false)
+        byte_fallback = _json_get_bool(model_obj, "byte_fallback", false)
+        dropout = _json_get_optional_float(model_obj, "dropout")
+        if dropout !== nothing && dropout > 0
+            throw(ArgumentError(
+                "Unsupported model setting: dropout=$(dropout) at $path.dropout. " *
+                "Workaround: set dropout to 0/null or export a deterministic tokenizer.json.",
+            ))
+        end
+        return HFBPEModelSpec(
+            vocab,
+            merges,
+            unk_token,
+            false,
+            continuing_prefix,
+            suffix,
+            fuse_unk,
+            byte_fallback,
+            dropout,
+        )
     elseif type_name == "wordpiece"
         vocab = _parse_vocab_map(_json_get_required(model_obj, "vocab", "$path.vocab"), "$path.vocab")
         unk_token = _json_get_string(model_obj, "unk_token", "[UNK]")
         continuation = _json_get_string(model_obj, "continuing_subword_prefix", "##")
-        return HFWordPieceModelSpec(vocab, unk_token, continuation)
+        max_input_chars = _json_get_int(model_obj, "max_input_chars_per_word", 100)
+        return HFWordPieceModelSpec(vocab, unk_token, continuation, max_input_chars)
     elseif type_name == "unigram"
         return _parse_unigram_model(model_obj, path)
     end
@@ -90,7 +117,8 @@ function _parse_unigram_model(model_obj, path::String)::HFUnigramModelSpec
 
     unk_id_zero = _json_get_int(model_obj, "unk_id", 0)
     0 <= unk_id_zero < length(tokens) || throw(ArgumentError("Unigram unk_id out of range at $path.unk_id"))
-    return HFUnigramModelSpec(tokens, scores, unk_id_zero + 1)
+    byte_fallback = _json_get_bool(model_obj, "byte_fallback", false)
+    return HFUnigramModelSpec(tokens, scores, unk_id_zero + 1, byte_fallback)
 end
 
 function _parse_hf_normalizer(normalizer_obj, path::String)::HFJSONNormalizer
@@ -103,8 +131,19 @@ function _parse_hf_normalizer(normalizer_obj, path::String)::HFJSONNormalizer
         return HFLowercaseNormalizer()
     elseif type_name == "NFC"
         return HFNFCNormalizer()
+    elseif type_name == "NFD"
+        return HFNFDNormalizer()
     elseif type_name == "NFKC"
         return HFNFKCNormalizer()
+    elseif type_name == "StripAccents"
+        return HFStripAccentsNormalizer()
+    elseif type_name == "Replace"
+        pattern = _parse_split_regex(_json_get_required(normalizer_obj, "pattern", "$path.pattern"), "$path.pattern")
+        replacement = _json_get_string(normalizer_obj, "content", "")
+        return HFReplaceNormalizer(pattern, replacement)
+    elseif type_name == "Prepend"
+        prefix = _json_get_required_string(normalizer_obj, "prepend", "$path.prepend")
+        return HFPrependNormalizer(prefix)
     elseif type_name == "Sequence"
         items_any = _json_get_required(normalizer_obj, "normalizers", "$path.normalizers")
         _json_is_array(items_any) || throw(ArgumentError("Normalizer sequence must be an array at $path.normalizers"))
@@ -142,6 +181,13 @@ function _parse_hf_pretokenizer(pre_obj, path::String)::HFJSONPreTokenizer
         invert = _json_get_bool(pre_obj, "invert", false)
         invert && throw(ArgumentError("Unsupported Split invert=true at $path.invert"))
         return HFSplitPreTokenizer(regex, Symbol(behavior_raw))
+    elseif type_name == "Digits"
+        individual_digits = _json_get_bool(pre_obj, "individual_digits", false)
+        return HFDigitsPreTokenizer(individual_digits)
+    elseif type_name == "Punctuation"
+        behavior_raw = lowercase(_json_get_string(pre_obj, "behavior", "isolated"))
+        behavior_raw in ("isolated", "removed") || throw(ArgumentError("Unsupported Punctuation behavior '$behavior_raw' at $path.behavior"))
+        return HFPunctuationPreTokenizer(Symbol(behavior_raw))
     elseif type_name == "Sequence"
         items_any = _json_get_required(pre_obj, "pretokenizers", "$path.pretokenizers")
         _json_is_array(items_any) || throw(ArgumentError("Pre-tokenizer sequence must be an array at $path.pretokenizers"))
@@ -172,6 +218,14 @@ function _parse_hf_postprocessor(post_obj, path::String)::HFJSONPostProcessor
         return HFTemplateProcessingPostProcessor(single, pair, specials)
     elseif type_name == "ByteLevel"
         return HFByteLevelPostProcessor()
+    elseif type_name == "BertProcessing"
+        cls_token, cls_id = _parse_token_id_pair(_json_get_required(post_obj, "cls", "$path.cls"), "$path.cls")
+        sep_token, sep_id = _parse_token_id_pair(_json_get_required(post_obj, "sep", "$path.sep"), "$path.sep")
+        return HFBertProcessingPostProcessor(cls_token, cls_id, sep_token, sep_id)
+    elseif type_name == "RobertaProcessing"
+        cls_token, cls_id = _parse_token_id_pair(_json_get_required(post_obj, "cls", "$path.cls"), "$path.cls")
+        sep_token, sep_id = _parse_token_id_pair(_json_get_required(post_obj, "sep", "$path.sep"), "$path.sep")
+        return HFRobertaProcessingPostProcessor(cls_token, cls_id, sep_token, sep_id)
     elseif type_name == "Sequence"
         items_any = _json_get_required(post_obj, "processors", "$path.processors")
         _json_is_array(items_any) || throw(ArgumentError("Post-processor sequence must be an array at $path.processors"))
@@ -196,6 +250,9 @@ function _parse_hf_decoder(decoder_obj, path::String)::HFJSONDecoder
     elseif type_name == "WordPiece"
         prefix = _json_get_string(decoder_obj, "prefix", "##")
         return HFWordPieceDecoder(prefix)
+    elseif type_name == "BPEDecoder"
+        suffix = _json_get_string(decoder_obj, "suffix", "</w>")
+        return HFBPEDecoder(suffix)
     elseif type_name == "Metaspace"
         replacement = _json_get_string(decoder_obj, "replacement", "▁")
         return HFMetaspaceDecoder(replacement)
@@ -265,40 +322,54 @@ function _parse_template_special_tokens(tokens_any, path::String)::Dict{String,I
     return result
 end
 
-function _parse_added_token_ids(tokens_any, path::String)::Dict{String,Int}
-    tokens_any === nothing && return Dict{String,Int}()
+function _parse_added_tokens(tokens_any, path::String)::Vector{HFAddedToken}
+    tokens_any === nothing && return HFAddedToken[]
     _json_is_array(tokens_any) || throw(ArgumentError("added_tokens must be an array at $path"))
 
-    result = Dict{String,Int}()
+    result = HFAddedToken[]
     for (i, entry) in enumerate(tokens_any)
         entry_path = "$path[$i]"
         _json_is_object(entry) || continue
         _json_haskey(entry, "content") || continue
         _json_haskey(entry, "id") || continue
-        token = _json_get_required_string(entry, "content", "$entry_path.content")
+
+        content = _json_get_required_string(entry, "content", "$entry_path.content")
         id_zero = _as_int(_json_get_required(entry, "id", "$entry_path.id"), "$entry_path.id")
-        result[token] = id_zero + 1
+        push!(result, HFAddedToken(
+            content,
+            id_zero + 1,
+            _json_get_bool(entry, "special", false),
+            _json_get_bool(entry, "single_word", false),
+            _json_get_bool(entry, "lstrip", false),
+            _json_get_bool(entry, "rstrip", false),
+            _json_get_bool(entry, "normalized", true),
+        ))
     end
     return result
 end
 
-function _parse_special_token_ids(tokens_any, path::String)::Dict{String,Int}
-    tokens_any === nothing && return Dict{String,Int}()
-    _json_is_array(tokens_any) || throw(ArgumentError("added_tokens must be an array at $path"))
+function _parse_hf_truncation(obj, path::String)::Union{Nothing,NamedTuple}
+    obj === nothing && return nothing
+    _json_is_object(obj) || throw(ArgumentError("truncation must be an object/null at $path"))
+    return (
+        max_length = _json_get_int(obj, "max_length", 0),
+        strategy = _json_get_string(obj, "strategy", "longest_first"),
+        stride = _json_get_int(obj, "stride", 0),
+        direction = _json_get_string(obj, "direction", "right"),
+    )
+end
 
-    result = Dict{String,Int}()
-    for (i, entry) in enumerate(tokens_any)
-        entry_path = "$path[$i]"
-        _json_is_object(entry) || continue
-        _json_haskey(entry, "content") || continue
-        _json_haskey(entry, "id") || continue
-        special = _json_get_bool(entry, "special", false)
-        special || continue
-        token = _json_get_required_string(entry, "content", "$entry_path.content")
-        id_zero = _as_int(_json_get_required(entry, "id", "$entry_path.id"), "$entry_path.id")
-        result[token] = id_zero + 1
-    end
-    return result
+function _parse_hf_padding(obj, path::String)::Union{Nothing,NamedTuple}
+    obj === nothing && return nothing
+    _json_is_object(obj) || throw(ArgumentError("padding must be an object/null at $path"))
+    return (
+        strategy = _json_get_string(obj, "strategy", "batch_longest"),
+        direction = _json_get_string(obj, "direction", "right"),
+        pad_id = _json_get_int(obj, "pad_id", 0) + 1,
+        pad_type_id = _json_get_int(obj, "pad_type_id", 0),
+        pad_token = _json_get_string(obj, "pad_token", "[PAD]"),
+        length = _json_get_int(obj, "length", 0),
+    )
 end
 
 function _merge_template_special_ids!(
@@ -309,6 +380,12 @@ function _merge_template_special_ids!(
         for (token, id) in post.special_tokens
             all_specials[token] = id
         end
+    elseif post isa HFBertProcessingPostProcessor
+        all_specials[post.cls_token] = post.cls_id
+        all_specials[post.sep_token] = post.sep_id
+    elseif post isa HFRobertaProcessingPostProcessor
+        all_specials[post.cls_token] = post.cls_id
+        all_specials[post.sep_token] = post.sep_id
     elseif post isa HFSequencePostProcessor
         for item in post.items
             _merge_template_special_ids!(all_specials, item)
@@ -391,6 +468,20 @@ function _parse_split_regex(pattern_any, path::String)::Regex
     end
 end
 
+function _parse_token_id_pair(value, path::String)::Tuple{String,Int}
+    if _json_is_array(value)
+        length(value) == 2 || throw(ArgumentError("Expected [token, id] pair at $path"))
+        token = String(value[1])
+        id = _as_int(value[2], "$path[2]") + 1
+        return (token, id)
+    elseif _json_is_object(value)
+        token = _json_get_required_string(value, "token", "$path.token")
+        id = _as_int(_json_get_required(value, "id", "$path.id"), "$path.id") + 1
+        return (token, id)
+    end
+    throw(ArgumentError("Expected token/id pair at $path"))
+end
+
 function _unsupported_hf_component(component::String, type_name::String, path::String)
     throw(ArgumentError(
         "Unsupported $component type: $type_name at $path. " *
@@ -440,6 +531,15 @@ function _json_get_string(obj, key::String, default::String)::String
     return String(value)
 end
 
+function _json_get_optional_string(obj, key::String)::Union{Nothing,String}
+    value = _json_get(obj, key)
+    value === nothing && return nothing
+    value isa AbstractString || throw(ArgumentError("Expected string at field '$key'"))
+    text = String(value)
+    isempty(text) && return nothing
+    return text
+end
+
 function _json_get_required_string(obj, key::String, path::String)::String
     value = _json_get_required(obj, key, path)
     value isa AbstractString || throw(ArgumentError("Expected string at $path"))
@@ -457,6 +557,12 @@ function _json_get_int(obj, key::String, default::Int)::Int
     value = _json_get(obj, key)
     value === nothing && return default
     return _as_int(value, key)
+end
+
+function _json_get_optional_float(obj, key::String)::Union{Nothing,Float64}
+    value = _json_get(obj, key)
+    value === nothing && return nothing
+    return _as_float(value, key)
 end
 
 function _as_int(value, path::String)::Int

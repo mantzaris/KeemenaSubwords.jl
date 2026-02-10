@@ -3,6 +3,7 @@
 const ROOT = normpath(joinpath(@__DIR__, ".."))
 const README_PATH = joinpath(ROOT, "README.md")
 const DOCS_SRC = joinpath(ROOT, "docs", "src")
+const SRC_DIR = joinpath(ROOT, "src")
 
 function _markdown_files()::Vector{String}
     files = String[README_PATH]
@@ -10,6 +11,18 @@ function _markdown_files()::Vector{String}
         endswith(entry, ".md") || continue
         push!(files, joinpath(DOCS_SRC, entry))
     end
+    return files
+end
+
+function _source_files()::Vector{String}
+    files = String[]
+    for (dir, _, names) in walkdir(SRC_DIR)
+        for name in names
+            endswith(name, ".jl") || continue
+            push!(files, joinpath(dir, name))
+        end
+    end
+    sort!(files)
     return files
 end
 
@@ -76,6 +89,23 @@ function _check_code_block!(errors::Vector{String}, file::String, block::String,
                 "found load_wordpiece(...) with vocab.json/merges.txt; expected vocab.txt",
             )
         end
+        if occursin(r"load_wordpiece\s*\(", line) && (occursin(r"encoder\.json", line) || occursin(r"vocab\.bpe", line))
+            _push_block_error!(
+                errors,
+                file,
+                idx,
+                "found load_wordpiece(...) with encoder.json/vocab.bpe; expected vocab.txt",
+            )
+        end
+        if occursin(r"format\s*=\s*:(wordpiece|wordpiece_vocab)", line) &&
+           (occursin(r"vocab\.json", line) || occursin(r"merges\.txt", line) || occursin(r"encoder\.json", line) || occursin(r"vocab\.bpe", line))
+            _push_block_error!(
+                errors,
+                file,
+                idx,
+                "found WordPiece format paired with BPE files; expected vocab.txt",
+            )
+        end
     end
     return nothing
 end
@@ -96,6 +126,37 @@ function main()::Nothing
 
         for (idx, block) in enumerate(_code_blocks(text))
             _check_code_block!(errors, file, block, idx)
+        end
+    end
+
+    for file in _source_files()
+        rel = relpath(file, ROOT)
+        for (lineno, raw_line) in enumerate(eachline(file))
+            line = strip(raw_line)
+            isempty(line) && continue
+
+            if occursin(r"format\s*=\s*:bpe_gpt2", line) && occursin(r"vocab\.txt", line)
+                push!(errors, "$rel:$lineno: found format=:bpe_gpt2 paired with vocab.txt; expected vocab.json + merges.txt")
+            end
+            if occursin(r"load_bpe_gpt2\s*\(", line) && occursin(r"vocab\.txt", line)
+                push!(errors, "$rel:$lineno: found load_bpe_gpt2(...) with vocab.txt; expected vocab.json + merges.txt")
+            end
+            if occursin(r"format\s*=\s*:bpe_encoder", line) && (occursin(r"vocab\.txt", line) || occursin(r"merges\.txt", line))
+                push!(errors, "$rel:$lineno: found format=:bpe_encoder paired with vocab.txt/merges.txt; expected encoder.json + vocab.bpe")
+            end
+            if occursin(r"load_bpe_encoder\s*\(", line) && (occursin(r"vocab\.txt", line) || occursin(r"merges\.txt", line))
+                push!(errors, "$rel:$lineno: found load_bpe_encoder(...) with vocab.txt/merges.txt; expected encoder.json + vocab.bpe")
+            end
+            if occursin(r"load_wordpiece\s*\(", line) && (occursin(r"vocab\.json", line) || occursin(r"merges\.txt", line))
+                push!(errors, "$rel:$lineno: found load_wordpiece(...) with vocab.json/merges.txt; expected vocab.txt")
+            end
+            if occursin(r"load_wordpiece\s*\(", line) && (occursin(r"encoder\.json", line) || occursin(r"vocab\.bpe", line))
+                push!(errors, "$rel:$lineno: found load_wordpiece(...) with encoder.json/vocab.bpe; expected vocab.txt")
+            end
+            if occursin(r"format\s*=\s*:(wordpiece|wordpiece_vocab)", line) &&
+               (occursin(r"vocab\.json", line) || occursin(r"merges\.txt", line) || occursin(r"encoder\.json", line) || occursin(r"vocab\.bpe", line))
+                push!(errors, "$rel:$lineno: found WordPiece format paired with BPE files; expected vocab.txt")
+            end
         end
     end
 

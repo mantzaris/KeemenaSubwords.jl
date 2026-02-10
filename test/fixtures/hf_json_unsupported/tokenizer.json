@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "normalizer": {"type": "Lowercase"},
-  "pre_tokenizer": {"type": "Digits"},
+  "pre_tokenizer": {"type": "UnsupportedPretokenizerX"},
   "model": {
     "type": "WordPiece",
     "unk_token": "[UNK]",

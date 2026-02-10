@@ -1,0 +1,41 @@
+{
+  "version": "1.0",
+  "normalizer": {
+    "type": "Sequence",
+    "normalizers": [
+      {"type": "NFKC"},
+      {"type": "Lowercase"},
+      {"type": "Replace", "pattern": {"String": "\\n"}, "content": " "}
+    ]
+  },
+  "pre_tokenizer": {"type": "WhitespaceSplit"},
+  "post_processor": {
+    "type": "TemplateProcessing",
+    "single": [
+      {"SpecialToken": {"id": "[SPECIAL]", "type_id": 0}},
+      {"Sequence": {"id": "A", "type_id": 0}}
+    ],
+    "special_tokens": [
+      {"id": "[SPECIAL]", "ids": [5], "tokens": ["[SPECIAL]"]}
+    ]
+  },
+  "decoder": {"type": "WordPiece", "prefix": "##"},
+  "model": {
+    "type": "WordPiece",
+    "unk_token": "[UNK]",
+    "continuing_subword_prefix": "##",
+    "max_input_chars_per_word": 16,
+    "vocab": {
+      "[UNK]": 0,
+      "i": 1,
+      "love": 2,
+      "!": 3,
+      "<CITY>": 4,
+      "[SPECIAL]": 5
+    }
+  },
+  "added_tokens": [
+    {"id": 4, "content": "<CITY>", "single_word": true, "lstrip": true, "rstrip": true, "normalized": true, "special": false},
+    {"id": 5, "content": "[SPECIAL]", "single_word": false, "lstrip": false, "rstrip": false, "normalized": false, "special": true}
+  ]
+}

@@ -4,7 +4,7 @@ using KeemenaSubwords
 const FIXTURES_DIR = joinpath(@__DIR__, "fixtures")
 fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
 
-@testset "KeemenaSubwords sections 1-13" begin
+@testset "KeemenaSubwords sections 1-15" begin
     @testset "Model registry" begin
         names = available_models()
         @test :core_bpe_en in names
@@ -196,6 +196,38 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
         end
         @test err isa ArgumentError
         @test occursin("Unsupported pre_tokenizer type", sprint(showerror, err))
+        @test occursin("\$.pre_tokenizer", sprint(showerror, err))
+        @test occursin("Workaround", sprint(showerror, err))
+    end
+
+    @testset "Section 15 Hugging Face compliance expansion" begin
+        hf_bpe = load_hf_tokenizer_json(fixture("hf_json_bytelevel_bpe", "tokenizer.json"))
+        @test hf_bpe isa HuggingFaceJSONTokenizer
+        @test tokenize(hf_bpe, "Hello world") == ["hello</w>", "world</w>"]
+        bpe_ids = encode(hf_bpe, "Hello world")
+        @test !isempty(bpe_ids)
+        @test decode(hf_bpe, bpe_ids) == "hello world"
+
+        hf_uni = load_hf_tokenizer_json(fixture("hf_json_unigram_metaspace", "tokenizer.json"))
+        @test hf_uni isa HuggingFaceJSONTokenizer
+        uni_ids = encode(hf_uni, "Hello world")
+        @test !isempty(uni_ids)
+        @test decode(hf_uni, uni_ids) == "hello world"
+
+        hf_added = load_hf_tokenizer_json(fixture("hf_json_added_tokens", "tokenizer.json"))
+        @test hf_added isa HuggingFaceJSONTokenizer
+
+        # normalized=true + lstrip/rstrip should match <CITY> around extra spaces
+        ids_city = encode(hf_added, "I love   <city>   !")
+        @test token_to_id(hf_added, "<CITY>") in ids_city
+
+        # special added tokens must bypass normalization and match verbatim
+        ids_special = encode(hf_added, "[SPECIAL] i")
+        @test token_to_id(hf_added, "[SPECIAL]") == first(ids_special)
+
+        # TemplateProcessing should prepend [SPECIAL] when requested
+        templated = encode(hf_added, "i love !"; add_special_tokens=true)
+        @test token_to_id(hf_added, "[SPECIAL]") == first(templated)
     end
 
     @testset "Section 9 built-in public baseline keys" begin

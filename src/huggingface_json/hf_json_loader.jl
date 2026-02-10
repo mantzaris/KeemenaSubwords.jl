@@ -1,9 +1,13 @@
 """
 Load a Hugging Face `tokenizer.json` tokenizer in pure Julia.
 
+Expected files:
+- `tokenizer.json` directly, or
+- a directory containing `tokenizer.json`.
+
 Examples:
 - `load_hf_tokenizer_json("/path/to/tokenizer.json")`
-- `load_hf_tokenizer_json("/path/to/model_dir")` (expects `tokenizer.json` inside)
+- `load_hf_tokenizer_json("/path/to/model_dir")`
 """
 function load_hf_tokenizer_json(
     path::AbstractString;
@@ -17,17 +21,25 @@ function load_hf_tokenizer_json(
 
     token_special_ids = copy(spec.special_token_ids)
     special_ids = _derive_symbol_special_ids(base, token_special_ids)
-    metadata = TokenizerMetadata(:hf_tokenizer_json, name, v"0.4.0", :hf_json)
+    metadata = TokenizerMetadata(:hf_tokenizer_json, name, v"0.5.0", :hf_json)
+    special_patterns, raw_patterns, normalized_patterns = _build_added_token_patterns(spec.added_tokens, spec.normalizer)
 
     return HuggingFaceJSONTokenizer(
+        model,
         base,
         spec.normalizer,
         spec.pretokenizer,
         spec.postprocessor,
         spec.decoder,
+        spec.added_tokens,
+        special_patterns,
+        raw_patterns,
+        normalized_patterns,
         spec.added_token_ids,
         token_special_ids,
         special_ids,
+        spec.truncation,
+        spec.padding,
         metadata,
         spec.source_path,
     )
@@ -38,7 +50,17 @@ function _with_hf_added_tokens(
     added_token_ids::Dict{String,Int},
 )::HFBPEModelSpec
     vocab = _merge_added_tokens(model.vocab, added_token_ids)
-    return HFBPEModelSpec(vocab, model.merges, model.unk_token, model.byte_level, model.end_of_word_suffix)
+    return HFBPEModelSpec(
+        vocab,
+        model.merges,
+        model.unk_token,
+        model.byte_level,
+        model.continuing_subword_prefix,
+        model.end_of_word_suffix,
+        model.fuse_unk,
+        model.byte_fallback,
+        model.dropout,
+    )
 end
 
 function _with_hf_added_tokens(
@@ -46,7 +68,12 @@ function _with_hf_added_tokens(
     added_token_ids::Dict{String,Int},
 )::HFWordPieceModelSpec
     vocab = _merge_added_tokens(model.vocab, added_token_ids)
-    return HFWordPieceModelSpec(vocab, model.unk_token, model.continuation_prefix)
+    return HFWordPieceModelSpec(
+        vocab,
+        model.unk_token,
+        model.continuation_prefix,
+        model.max_input_chars_per_word,
+    )
 end
 
 function _with_hf_added_tokens(
@@ -55,7 +82,7 @@ function _with_hf_added_tokens(
 )::HFUnigramModelSpec
     vocab, scores = _merge_added_tokens_with_scores(model.vocab, model.scores, added_token_ids)
     unk_id = min(model.unk_id, length(vocab))
-    return HFUnigramModelSpec(vocab, scores, unk_id)
+    return HFUnigramModelSpec(vocab, scores, unk_id, model.byte_fallback)
 end
 
 function _with_hf_bytelevel_flag(model::HFJSONModelSpec, spec::HFJSONSpec)::HFJSONModelSpec
@@ -66,7 +93,11 @@ function _with_hf_bytelevel_flag(model::HFJSONModelSpec, spec::HFJSONSpec)::HFJS
         model.merges,
         model.unk_token,
         byte_level,
+        model.continuing_subword_prefix,
         model.end_of_word_suffix,
+        model.fuse_unk,
+        model.byte_fallback,
+        model.dropout,
     )
 end
 
@@ -147,12 +178,12 @@ function _build_hf_json_base_tokenizer(
     end
 
     end_marker = model.end_of_word_suffix
-    base_meta = TokenizerMetadata(:bpe_gpt2, model_name, v"0.4.0", :none)
+    base_meta = TokenizerMetadata(:bpe_gpt2, model_name, v"0.5.0", :none)
     bpe = BPETokenizer(vocab, pair_ranks, model.unk_token, end_marker, base_meta)
 
     if model.byte_level
         b2u, u2b = _byte_unicode_tables()
-        meta = TokenizerMetadata(:bytebpe, model_name, v"0.4.0", :none)
+        meta = TokenizerMetadata(:bytebpe, model_name, v"0.5.0", :none)
         return ByteBPETokenizer(bpe, b2u, u2b, meta)
     end
 
@@ -165,8 +196,14 @@ function _build_hf_json_base_tokenizer(
 )::AbstractSubwordTokenizer
     special_map = detect_special_tokens(model.vocab, model.unk_token)
     vocab = build_vocab(model.vocab; special_tokens=special_map)
-    meta = TokenizerMetadata(:wordpiece, model_name, v"0.4.0", :none)
-    return WordPieceTokenizer(vocab, model.continuation_prefix, model.unk_token, meta)
+    meta = TokenizerMetadata(:wordpiece, model_name, v"0.5.0", :none)
+    return WordPieceTokenizer(
+        vocab,
+        model.continuation_prefix,
+        model.unk_token,
+        model.max_input_chars_per_word,
+        meta,
+    )
 end
 
 function _build_hf_json_base_tokenizer(
@@ -176,7 +213,7 @@ function _build_hf_json_base_tokenizer(
     unk_token = model.vocab[model.unk_id]
     special_map = detect_special_tokens(model.vocab, unk_token)
     vocab = build_vocab(model.vocab; special_tokens=special_map)
-    meta = TokenizerMetadata(:unigram, model_name, v"0.4.0", :none)
+    meta = TokenizerMetadata(:unigram, model_name, v"0.5.0", :none)
     return UnigramTokenizer(vocab, copy(model.scores), unk_token, "", meta)
 end
 
@@ -196,6 +233,37 @@ function _derive_symbol_special_ids(
     end
 
     return merged
+end
+
+function _build_added_token_patterns(
+    added_tokens::Vector{HFAddedToken},
+    normalizer::HFJSONNormalizer,
+)::Tuple{Vector{HFAddedTokenPattern},Vector{HFAddedTokenPattern},Vector{HFAddedTokenPattern}}
+    special_patterns = HFAddedTokenPattern[]
+    raw_patterns = HFAddedTokenPattern[]
+    normalized_patterns = HFAddedTokenPattern[]
+
+    for token in added_tokens
+        if token.special
+            push!(special_patterns, HFAddedTokenPattern(token.content, token.id, token.single_word, token.lstrip, token.rstrip))
+        elseif token.normalized
+            normalized_content = _apply_hf_normalizer(normalizer, token.content)
+            isempty(normalized_content) && continue
+            push!(normalized_patterns, HFAddedTokenPattern(normalized_content, token.id, token.single_word, token.lstrip, token.rstrip))
+        else
+            push!(raw_patterns, HFAddedTokenPattern(token.content, token.id, token.single_word, token.lstrip, token.rstrip))
+        end
+    end
+
+    _sort_added_patterns!(special_patterns)
+    _sort_added_patterns!(raw_patterns)
+    _sort_added_patterns!(normalized_patterns)
+    return (special_patterns, raw_patterns, normalized_patterns)
+end
+
+function _sort_added_patterns!(patterns::Vector{HFAddedTokenPattern})::Nothing
+    sort!(patterns; by=p -> (-length(p.content), p.content))
+    return nothing
 end
 
 function _special_symbol_for_token(token::String)::Union{Nothing,Symbol}

@@ -2,6 +2,7 @@ struct WordPieceTokenizer <: AbstractSubwordTokenizer
     vocab::SubwordVocabulary
     continuation_prefix::String
     unk_token::String
+    max_input_chars_per_word::Int
     metadata::TokenizerMetadata
 end
 
@@ -16,6 +17,7 @@ function load_wordpiece(
     path::AbstractString;
     continuation_prefix::AbstractString="##",
     unk_token::AbstractString="[UNK]",
+    max_input_chars_per_word::Int=100,
     model_name::Union{Nothing,AbstractString}=nothing,
 )::WordPieceTokenizer
     vocab_path = _wordpiece_vocab_path(path)
@@ -29,7 +31,13 @@ function load_wordpiece(
     name = model_name === nothing ? basename(vocab_path) : String(model_name)
     metadata = TokenizerMetadata(:wordpiece, name, v"0.2.0", :none)
 
-    return WordPieceTokenizer(vocab, String(continuation_prefix), String(unk_token), metadata)
+    return WordPieceTokenizer(
+        vocab,
+        String(continuation_prefix),
+        String(unk_token),
+        max_input_chars_per_word,
+        metadata,
+    )
 end
 
 (tokenizer::WordPieceTokenizer)(text::AbstractString)::Vector{String} = tokenize(tokenizer, text)
@@ -172,6 +180,9 @@ end
 
 function _tokenize_word(tokenizer::WordPieceTokenizer, word::String)::Vector{String}
     isempty(word) && return String[]
+    if tokenizer.max_input_chars_per_word > 0 && length(word) > tokenizer.max_input_chars_per_word
+        return [tokenizer.unk_token]
+    end
 
     pieces = String[]
     first_char = firstindex(word)

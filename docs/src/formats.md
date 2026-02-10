@@ -10,7 +10,7 @@
 | `:bpe` | directory or `vocab.txt` file | `vocab.txt` + `merges.txt` | `vocab`, `merges` (tuple/spec) | `load_bpe("/path/to/model_dir")` |
 | `:bytebpe` | directory or file pair | `vocab.txt` + `merges.txt` | `vocab`, `merges` (tuple/spec) | `load_bytebpe("/path/to/model_dir")` |
 | `:wordpiece` / `:wordpiece_vocab` | file or directory | `vocab.txt` | `vocab_txt` | `load_wordpiece("/path/to/vocab.txt")` |
-| `:sentencepiece_model` | file or directory | `spm.model` / `spiece.model` / `tokenizer.model` / `tokenizer.model.v3` / `sentencepiece.bpe.model` | `model_file` | `load_sentencepiece("/path/to/tokenizer.model"; kind=:auto)` |
+| `:sentencepiece_model` | file or directory | Standard SentencePiece binary `.model`/`.model.v3` files, or Keemena text-exported `.model` files (`spm.model`, `spiece.model`, `tokenizer.model`, `tokenizer.model.v3`, `sentencepiece.bpe.model`) | `model_file` | `load_sentencepiece("/path/to/tokenizer.model"; kind=:auto)` |
 | `:tiktoken` | file or directory | `*.tiktoken` or tiktoken-text `tokenizer.model` | `encoding_file` | `load_tiktoken("/path/to/o200k_base.tiktoken")` |
 | `:unigram` | file or directory | `unigram.tsv` | `path` | `load_unigram("/path/to/unigram.tsv")` |
 
@@ -24,7 +24,7 @@
   5) `*.tiktoken`
 - `.model` files are sniffed:
   - tiktoken-like text (`<base64> <int>`) => `:tiktoken`
-  - binary or SentencePiece-like payload => `:sentencepiece_model`
+  - binary SentencePiece protobuf payload or Keemena text SentencePiece payload => `:sentencepiece_model`
 - LLaMA3-style files often use `tokenizer.model` containing tiktoken text. Use explicit override when needed.
 
 ```julia

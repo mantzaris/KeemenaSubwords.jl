@@ -32,7 +32,6 @@ llama = load_tokenizer(:llama3_8b_tokenizer)
 
 ## Featured Models
 
-<!-- KEEMENA_FEATURED_MODELS_START -->
 _Generated from registry metadata via `tools/sync_readme_models.jl`._
 
 - **`tiktoken`**: `:tiktoken_cl100k_base`, `:tiktoken_o200k_base`
@@ -40,7 +39,6 @@ _Generated from registry metadata via `tools/sync_readme_models.jl`._
 - **`sentencepiece_model`**: `:mistral_v3_sentencepiece`, `:xlm_roberta_base_sentencepiece_bpe`
 - **`hf_tokenizer_json`**: `:qwen2_5_bpe`
 - **`wordpiece_vocab`**: `:bert_base_multilingual_cased_wordpiece`, `:bert_base_uncased_wordpiece`
-<!-- KEEMENA_FEATURED_MODELS_END -->
 
 ## Documentation
 

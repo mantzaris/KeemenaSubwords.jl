@@ -1,9 +1,8 @@
 (tokenizer::HuggingFaceJSONTokenizer)(text::AbstractString)::Vector{String} = tokenize(tokenizer, text)
 
 function tokenize(tokenizer::HuggingFaceJSONTokenizer, text::AbstractString)::Vector{String}
-    normalized = _apply_hf_normalizer(tokenizer.normalizer, String(text))
-    pretokenized = _apply_hf_pretokenizer(tokenizer.pretokenizer, normalized)
-    return tokenize(tokenizer.base, pretokenized)
+    ids = encode(tokenizer, text; add_special_tokens=false)
+    return String[id_to_token(tokenizer, id) for id in ids]
 end
 
 function encode(
@@ -11,9 +10,18 @@ function encode(
     text::AbstractString;
     add_special_tokens::Bool=false,
 )::Vector{Int}
-    normalized = _apply_hf_normalizer(tokenizer.normalizer, String(text))
-    pretokenized = _apply_hf_pretokenizer(tokenizer.pretokenizer, normalized)
-    ids = encode(tokenizer.base, pretokenized; add_special_tokens=false)
+    segments = _segment_hf_input(tokenizer, String(text))
+    ids = Int[]
+
+    for seg in segments
+        if seg.kind == :added
+            push!(ids, seg.id)
+        else
+            pretokenized = _apply_hf_pretokenizer(tokenizer.pretokenizer, seg.text)
+            append!(ids, _encode_hf_model_segment(tokenizer, pretokenized))
+        end
+    end
+
     add_special_tokens || return ids
     return _apply_hf_postprocessor(tokenizer.postprocessor, ids, tokenizer)
 end
@@ -36,6 +44,265 @@ function special_tokens(tokenizer::HuggingFaceJSONTokenizer)::Dict{Symbol,Int}
     return copy(tokenizer.special_token_ids)
 end
 
+function _segment_hf_input(
+    tokenizer::HuggingFaceJSONTokenizer,
+    text::String,
+)::Vector{NamedTuple{(:kind, :text, :id),Tuple{Symbol,String,Int}}}
+    special_pass = _split_with_added_patterns(text, tokenizer.special_added_patterns)
+    out = NamedTuple{(:kind, :text, :id),Tuple{Symbol,String,Int}}[]
+
+    for seg in special_pass
+        if seg.kind == :added
+            push!(out, seg)
+            continue
+        end
+
+        raw_pass = _split_with_added_patterns(seg.text, tokenizer.raw_added_patterns)
+        for raw_seg in raw_pass
+            if raw_seg.kind == :added
+                push!(out, raw_seg)
+                continue
+            end
+
+            normalized = _apply_hf_normalizer(tokenizer.normalizer, raw_seg.text)
+            normalized_pass = _split_with_added_patterns(normalized, tokenizer.normalized_added_patterns)
+            append!(out, normalized_pass)
+        end
+    end
+
+    return out
+end
+
+function _split_with_added_patterns(
+    text::String,
+    patterns::Vector{HFAddedTokenPattern},
+)::Vector{NamedTuple{(:kind, :text, :id),Tuple{Symbol,String,Int}}}
+    isempty(text) && return NamedTuple{(:kind, :text, :id),Tuple{Symbol,String,Int}}[]
+    isempty(patterns) && return [(kind=:text, text=text, id=0)]
+
+    spans = NamedTuple{(:kind, :text, :id),Tuple{Symbol,String,Int}}[]
+    i = firstindex(text)
+    stop = lastindex(text)
+    chunk_start = i
+
+    while i <= stop
+        best = _best_added_match(text, i, patterns)
+        if best === nothing
+            i = nextind(text, i)
+            continue
+        end
+
+        if chunk_start < best.start
+            prev_idx = prevind(text, best.start)
+            push!(spans, (kind=:text, text=String(SubString(text, chunk_start, prev_idx)), id=0))
+        end
+
+        push!(spans, (kind=:added, text=best.content, id=best.id))
+        i = nextind(text, best.stop)
+        chunk_start = i
+    end
+
+    if chunk_start <= stop
+        push!(spans, (kind=:text, text=String(SubString(text, chunk_start, stop)), id=0))
+    end
+
+    return spans
+end
+
+function _best_added_match(
+    text::String,
+    idx::Int,
+    patterns::Vector{HFAddedTokenPattern},
+)::Union{Nothing,NamedTuple}
+    best = nothing
+    for pattern in patterns
+        match = _match_added_pattern(text, idx, pattern)
+        match === nothing && continue
+
+        if best === nothing
+            best = match
+            continue
+        end
+
+        if match.stop > best.stop || (match.stop == best.stop && length(match.content) > length(best.content))
+            best = match
+        end
+    end
+    return best
+end
+
+function _match_added_pattern(
+    text::String,
+    idx::Int,
+    pattern::HFAddedTokenPattern,
+)::Union{Nothing,NamedTuple}
+    stop = lastindex(text)
+    core_start = idx
+
+    if pattern.lstrip
+        while core_start <= stop && isspace(text[core_start])
+            core_start = nextind(text, core_start)
+        end
+    end
+
+    core_start <= stop || return nothing
+    core_stop = _match_literal_at(text, core_start, pattern.content)
+    core_stop === nothing && return nothing
+
+    if pattern.single_word && !_is_single_word_span(text, core_start, core_stop)
+        return nothing
+    end
+
+    span_stop = core_stop
+    if pattern.rstrip
+        next_pos = nextind(text, span_stop)
+        while next_pos <= stop && isspace(text[next_pos])
+            span_stop = next_pos
+            next_pos = nextind(text, next_pos)
+        end
+    end
+
+    return (start=idx, stop=span_stop, content=pattern.content, id=pattern.id)
+end
+
+function _match_literal_at(
+    text::String,
+    start_idx::Int,
+    literal::String,
+)::Union{Nothing,Int}
+    isempty(literal) && return nothing
+
+    t_idx = start_idx
+    t_stop = lastindex(text)
+    for c in literal
+        t_idx <= t_stop || return nothing
+        text[t_idx] == c || return nothing
+        t_idx = nextind(text, t_idx)
+    end
+
+    return prevind(text, t_idx)
+end
+
+function _is_word_char(c::Char)::Bool
+    return isletter(c) || isnumeric(c) || c == '_'
+end
+
+function _is_single_word_span(text::String, start_idx::Int, stop_idx::Int)::Bool
+    first_idx = firstindex(text)
+    last_idx = lastindex(text)
+
+    if start_idx > first_idx
+        left = text[prevind(text, start_idx)]
+        _is_word_char(left) && return false
+    end
+
+    if stop_idx < last_idx
+        right = text[nextind(text, stop_idx)]
+        _is_word_char(right) && return false
+    end
+
+    return true
+end
+
+function _encode_hf_model_segment(
+    tokenizer::HuggingFaceJSONTokenizer,
+    text::String,
+)::Vector{Int}
+    model = tokenizer.model
+    base = tokenizer.base
+
+    if model isa HFBPEModelSpec
+        return _encode_hf_bpe_segment(base, model, text)
+    elseif model isa HFUnigramModelSpec
+        return _encode_hf_unigram_segment(base, model, text)
+    end
+
+    return encode(base, text; add_special_tokens=false)
+end
+
+function _encode_hf_bpe_segment(
+    base::AbstractSubwordTokenizer,
+    model::HFBPEModelSpec,
+    text::String,
+)::Vector{Int}
+    if base isa ByteBPETokenizer || !model.byte_fallback
+        return encode(base, text; add_special_tokens=false)
+    end
+
+    base_bpe = base::BPETokenizer
+    normalized = normalize_text(text)
+    ids = Int[]
+
+    for word in eachsplit(normalized)
+        pieces = _tokenize_bpe_word(base_bpe, String(word); append_end_marker=true)
+        if length(pieces) == 1 && pieces[1] == base_bpe.unk_token
+            fallback = _byte_fallback_tokens(base_bpe.vocab, String(word), base_bpe.end_of_word_marker, base_bpe.unk_token)
+            append!(ids, Int[token_to_id(base_bpe, piece) for piece in fallback])
+        else
+            append!(ids, Int[token_to_id(base_bpe, piece) for piece in pieces])
+        end
+    end
+
+    return ids
+end
+
+function _encode_hf_unigram_segment(
+    base::AbstractSubwordTokenizer,
+    model::HFUnigramModelSpec,
+    text::String,
+)::Vector{Int}
+    if !(base isa UnigramTokenizer) || !model.byte_fallback
+        return encode(base, text; add_special_tokens=false)
+    end
+
+    uni = base::UnigramTokenizer
+    normalized = normalize_text(text)
+    ids = Int[]
+
+    for word in eachsplit(normalized)
+        input = isempty(uni.whitespace_marker) ? String(word) : string(uni.whitespace_marker, String(word))
+        pieces = _viterbi_segment(uni, input)
+        if length(pieces) == 1 && pieces[1] == uni.unk_token
+            fallback = _byte_fallback_tokens(uni.vocab, String(word), nothing, uni.unk_token)
+            append!(ids, Int[token_to_id(uni, piece) for piece in fallback])
+        else
+            append!(ids, Int[token_to_id(uni, piece) for piece in pieces])
+        end
+    end
+
+    return ids
+end
+
+function _byte_fallback_tokens(
+    vocab::SubwordVocabulary,
+    word::String,
+    end_of_word_marker::Union{Nothing,String},
+    unk_token::String,
+)::Vector{String}
+    b2u, _ = _byte_unicode_tables()
+    unicode_tokens = String[]
+    for b in codeunits(word)
+        piece = string(b2u[Int(b) + 1])
+        haskey(vocab.token_to_id, piece) || (unicode_tokens = String[]; break)
+        push!(unicode_tokens, piece)
+    end
+
+    if !isempty(unicode_tokens)
+        if end_of_word_marker !== nothing && haskey(vocab.token_to_id, end_of_word_marker)
+            push!(unicode_tokens, end_of_word_marker)
+        end
+        return unicode_tokens
+    end
+
+    hex_tokens = String[]
+    for b in codeunits(word)
+        piece = "<0x$(uppercase(string(Int(b), base=16, pad=2)))>"
+        haskey(vocab.token_to_id, piece) || return String[unk_token]
+        push!(hex_tokens, piece)
+    end
+    return isempty(hex_tokens) ? String[unk_token] : hex_tokens
+end
+
 function _apply_hf_normalizer(::HFNoopNormalizer, text::String)::String
     return text
 end
@@ -48,8 +315,25 @@ function _apply_hf_normalizer(::HFNFCNormalizer, text::String)::String
     return Base.Unicode.normalize(text, :NFC)
 end
 
+function _apply_hf_normalizer(::HFNFDNormalizer, text::String)::String
+    return Base.Unicode.normalize(text, :NFD)
+end
+
 function _apply_hf_normalizer(::HFNFKCNormalizer, text::String)::String
     return Base.Unicode.normalize(text, :NFKC)
+end
+
+function _apply_hf_normalizer(::HFStripAccentsNormalizer, text::String)::String
+    decomposed = Base.Unicode.normalize(text, :NFD)
+    return replace(decomposed, r"\\p{M}+" => "")
+end
+
+function _apply_hf_normalizer(normalizer::HFReplaceNormalizer, text::String)::String
+    return replace(text, normalizer.pattern => normalizer.replacement)
+end
+
+function _apply_hf_normalizer(normalizer::HFPrependNormalizer, text::String)::String
+    return normalizer.prefix * text
 end
 
 function _apply_hf_normalizer(normalizer::HFSequenceNormalizer, text::String)::String
@@ -68,7 +352,10 @@ function _apply_hf_pretokenizer(::HFWhitespacePreTokenizer, text::String)::Strin
     return text
 end
 
-function _apply_hf_pretokenizer(::HFByteLevelPreTokenizer, text::String)::String
+function _apply_hf_pretokenizer(pre::HFByteLevelPreTokenizer, text::String)::String
+    if pre.add_prefix_space && !isempty(text) && !startswith(text, " ")
+        return " " * text
+    end
     return text
 end
 
@@ -82,13 +369,26 @@ end
 
 function _apply_hf_pretokenizer(pre::HFSplitPreTokenizer, text::String)::String
     if pre.behavior == :isolated
-        matches = String[]
-        for m in eachmatch(pre.pattern, text)
-            push!(matches, m.match)
-        end
-        return isempty(matches) ? text : join(matches, " ")
+        return replace(text, pre.pattern => (m -> " " * String(m) * " "))
     elseif pre.behavior == :removed
         return replace(text, pre.pattern => " ")
+    end
+
+    return text
+end
+
+function _apply_hf_pretokenizer(pre::HFDigitsPreTokenizer, text::String)::String
+    if pre.individual_digits
+        return replace(text, r"(\d)" => s" \1 ")
+    end
+    return replace(text, r"(\d+)" => s" \1 ")
+end
+
+function _apply_hf_pretokenizer(pre::HFPunctuationPreTokenizer, text::String)::String
+    if pre.behavior == :isolated
+        return replace(text, r"([[:punct:]])" => s" \1 ")
+    elseif pre.behavior == :removed
+        return replace(text, r"[[:punct:]]" => " ")
     end
 
     return text
@@ -127,6 +427,24 @@ function _apply_hf_postprocessor(
 )::Vector{Int}
     _ = tokenizer
     return ids
+end
+
+function _apply_hf_postprocessor(
+    post::HFBertProcessingPostProcessor,
+    ids::Vector{Int},
+    tokenizer::HuggingFaceJSONTokenizer,
+)::Vector{Int}
+    _ = tokenizer
+    return Int[post.cls_id; ids; post.sep_id]
+end
+
+function _apply_hf_postprocessor(
+    post::HFRobertaProcessingPostProcessor,
+    ids::Vector{Int},
+    tokenizer::HuggingFaceJSONTokenizer,
+)::Vector{Int}
+    _ = tokenizer
+    return Int[post.cls_id; ids; post.sep_id]
 end
 
 function _apply_hf_postprocessor(
@@ -208,9 +526,17 @@ function _apply_hf_decoder(
     text::String,
     tokenizer::HuggingFaceJSONTokenizer,
 )::String
-    _ = decoder
     _ = tokenizer
-    return text
+    return replace(text, decoder.prefix => "")
+end
+
+function _apply_hf_decoder(
+    decoder::HFBPEDecoder,
+    text::String,
+    tokenizer::HuggingFaceJSONTokenizer,
+)::String
+    _ = tokenizer
+    return strip(replace(text, decoder.suffix => " "))
 end
 
 function _apply_hf_decoder(

@@ -46,3 +46,11 @@ for key in recommended_defaults_for_llms()
     println(key)
 end
 ```
+
+## Tokenizer.json roadmap (no Python needed)
+
+Near-term roadmap items (in scope for this package):
+- expand Hugging Face component coverage incrementally (normalizers, pre-tokenizers, post-processors, decoders),
+- add optional richer encode outputs (`offsets`, `attention_mask`, `token_type_ids`) in a structured return type,
+- add a small number of additional curated flagship tokenizers where redistribution/license terms are clear,
+- continue performance hardening for BPE merge caching, WordPiece trie lookup, Unigram DP, and added-token matching.

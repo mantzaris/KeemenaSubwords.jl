@@ -35,7 +35,6 @@ model_path(:core_bpe_en)
 
 The table below is generated from the same registry used by `available_models()` and `describe_model(...)`.
 
-<!-- KEEMENA_MODELS_START -->
 _Generated from the registry by `tools/sync_readme_models.jl` (excluding `:user_local` entries)._
 
 ### `bpe` / `core`
@@ -126,7 +125,6 @@ _Generated from the registry by `tools/sync_readme_models.jl` (excluding `:user_
 | Key | Distribution | License | Upstream Repo | Upstream Ref | Expected Files | Description |
 | --- | --- | --- | --- | --- | --- | --- |
 | `:core_wordpiece_en` | `shipped` | `MIT` | `in-repo/core` | `in-repo:core` | vocab.txt | Tiny built-in English WordPiece model. |
-<!-- KEEMENA_MODELS_END -->
 
 `describe_model(key)` includes provenance metadata such as `license`, `family`, `distribution`, `upstream_repo`, `upstream_ref`, and `upstream_files`.
 

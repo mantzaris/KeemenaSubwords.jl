@@ -947,3 +947,98 @@ Complete plan section `## 14)` by slimming README, polishing docs consistency, i
 ### Notes
 - README now stays intentionally brief; full inventory/details remain docs-authoritative and generated from registry metadata.
 - Section-14 guardrails are now automated in CI to reduce future docs/API drift.
+
+## 2026-02-10 - Iteration 15
+
+### Objective
+Complete plan section `## 15)` with final docs/API consistency polish and deeper Hugging Face `tokenizer.json` compatibility so common modern HF pipelines work in pure Julia.
+
+### Completed section-15 implementation
+
+#### Docs marker leakage and generation flow
+- Removed visible marker-line strategy from generated sections.
+- Updated `tools/sync_readme_models.jl` to sync by stable anchor blocks instead:
+  - README block between `## Featured Models` and `## Documentation`.
+  - docs models block between the generated-table intro line and provenance line.
+- Regenerated:
+  - `README.md` featured models section.
+  - `docs/src/models.md` full registry table.
+- Result: no `KEEMENA_*` marker artifacts in rendered docs output.
+
+#### Canonical examples and API discoverability
+- Kept explicit loader APIs exported and prominently documented in `docs/src/api.md`:
+  - `load_bpe_gpt2`
+  - `load_bpe_encoder`
+  - `load_wordpiece`
+  - `load_sentencepiece`
+  - `load_tiktoken`
+  - `load_hf_tokenizer_json`
+  - plus `load_tokenizer`, `detect_tokenizer_format`, `detect_tokenizer_files`.
+- Standardized local spec/doc examples around canonical named keys:
+  - `vocab_json`, `merges_txt`
+  - `encoder_json`, `vocab_bpe`
+  - `vocab_txt`
+  - `model_file`
+  - `encoding_file`
+  - `tokenizer_json`
+- Clarified SentencePiece support consistently as:
+  - standard binary `.model` / `.model.v3`,
+  - or Keemena text-exported SentencePiece `.model` payloads.
+
+#### Docs guardrails and consistency linting
+- Expanded `tools/check_docs_examples.jl` checks:
+  - rejects GPT2+BPE mismatches (`format=:bpe_gpt2` with `vocab.txt`),
+  - rejects encoder-variant mismatches,
+  - rejects WordPiece usage/specs paired with BPE files (`vocab.json`, `merges.txt`, `encoder.json`, `vocab.bpe`).
+- Preserved deprecation hygiene:
+  - `register_external_model!` appears only as compatibility note (primary docs use `register_local_model!`).
+
+#### Hugging Face tokenizer.json compliance expansion
+- Expanded schema/model/pipeline support across:
+  - top-level parsing (`model`, `normalizer`, `pre_tokenizer`, `post_processor`, `decoder`, `added_tokens`, plus `truncation`/`padding` metadata parse),
+  - model specs:
+    - BPE (`continuing_subword_prefix`, `fuse_unk`, `byte_fallback`, `dropout` parse+validation),
+    - WordPiece (`max_input_chars_per_word`),
+    - Unigram (`byte_fallback`),
+  - added token runtime handling (`special`, `single_word`, `lstrip`, `rstrip`, `normalized`),
+  - normalizers:
+    - `StripAccents`, `Replace`, `Prepend`, `NFD`, plus `Sequence`,
+  - pre-tokenizers:
+    - `Digits`, `Punctuation`, plus existing `ByteLevel`, `Metaspace`, `Whitespace*`, `Split`, `Sequence`,
+  - post-processors:
+    - `BertProcessing`, `RobertaProcessing`, `TemplateProcessing`, `Sequence`,
+  - decoders:
+    - `BPE`, `WordPiece`, `ByteLevel`, `Metaspace`, `Sequence`.
+- Added/updated HF JSON fixtures and section-15 tests for:
+  - byte-level BPE patterns,
+  - metaspace unigram patterns,
+  - added token behaviors and template processing,
+  - unsupported component errors with JSON path + workaround guidance.
+
+#### WordPiece behavior hardening
+- Extended `WordPieceTokenizer` with `max_input_chars_per_word`.
+- Updated loading and tokenization logic to honor max-length behavior for WordPiece segmentation.
+
+#### Longer-term roadmap documentation (no training scope)
+- Added roadmap section to `docs/src/llm_cookbook.md` covering:
+  - incremental HF component coverage,
+  - richer optional encode outputs,
+  - curated additional flagship tokenizers,
+  - performance hardening priorities.
+- Updated docs home map link text in `docs/src/index.md`.
+
+### Verification
+- Ran: `julia --project=. -e 'using Pkg; Pkg.test()'`
+  - Result: `207/207` tests passed (`KeemenaSubwords sections 1-15`).
+- Ran: `julia --project=. tools/sync_readme_models.jl`
+  - Result: generated README/docs model sections updated.
+- Ran: `julia --project=. tools/sync_readme_models.jl --check`
+  - Result: README/docs generated sections in sync.
+- Ran: `julia --project=. tools/check_docs_examples.jl`
+  - Result: docs example consistency checks passed.
+- Ran: `julia --project=docs docs/make.jl`
+  - Result: docs build/doctests passed; deploy skipped locally as expected.
+
+### Notes
+- Marker leakage on docs models page is resolved by removing marker lines from generated page content.
+- Full inventory remains generated from registry metadata; README stays concise and docs-first.
