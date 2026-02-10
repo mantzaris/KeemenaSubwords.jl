@@ -1,10 +1,10 @@
 import Pkg.Artifacts
 using Downloads
+using SHA
 using TOML
 
 const _PACKAGE_ROOT = normpath(joinpath(@__DIR__, ".."))
 const _ARTIFACTS_TOML = joinpath(_PACKAGE_ROOT, "Artifacts.toml")
-const _ARTIFACT_ONLY_ROOT = joinpath(_PACKAGE_ROOT, "models", "_artifacts_only")
 const _DEFAULT_CACHE_ROOT = isempty(DEPOT_PATH) ?
     joinpath(homedir(), ".julia", "keemena_subwords") :
     joinpath(first(DEPOT_PATH), "keemena_subwords")
@@ -14,6 +14,7 @@ const _LOCAL_MODELS_LOADED = Ref(false)
 const _PERSISTED_LOCAL_KEYS = Set{Symbol}()
 const _LOCAL_MODEL_RESOLVED_FILES = Dict{Symbol,Vector{String}}()
 const _LOCAL_MODEL_NOTES = Dict{Symbol,String}()
+const _ARTIFACT_INSTALL_STATUS = Dict{String,Bool}()
 const _UPSTREAM_FILE_INFO = NamedTuple{(:relative_path, :url, :sha256),Tuple{String,String,Union{Nothing,String}}}
 const _VALID_MODEL_DISTRIBUTIONS = Set{Symbol}((
     :shipped,
@@ -64,6 +65,8 @@ _entry(
     upstream_ref,
 )
 
+_public_model_cache_dir(key::Symbol)::String = joinpath(_CACHE_ROOT, "public", String(key))
+
 const _MODEL_REGISTRY = Dict{Symbol,BuiltinModelEntry}(
     :core_bpe_en => _entry(
         :bpe,
@@ -107,7 +110,7 @@ const _MODEL_REGISTRY = Dict{Symbol,BuiltinModelEntry}(
         :artifact_public,
         "keemena_public_tokenizer_assets_v1",
         "tiktoken/o200k_base/o200k_base.tiktoken",
-        joinpath(_ARTIFACT_ONLY_ROOT, "tiktoken", "o200k_base", "o200k_base.tiktoken"),
+        _public_model_cache_dir(:tiktoken_o200k_base),
         "OpenAI tiktoken o200k_base encoding.",
         "MIT",
         "openaipublic/encodings",
@@ -119,7 +122,7 @@ const _MODEL_REGISTRY = Dict{Symbol,BuiltinModelEntry}(
         :artifact_public,
         "keemena_public_tokenizer_assets_v1",
         "tiktoken/cl100k_base/cl100k_base.tiktoken",
-        joinpath(_ARTIFACT_ONLY_ROOT, "tiktoken", "cl100k_base", "cl100k_base.tiktoken"),
+        _public_model_cache_dir(:tiktoken_cl100k_base),
         "OpenAI tiktoken cl100k_base encoding.",
         "MIT",
         "openaipublic/encodings",
@@ -131,7 +134,7 @@ const _MODEL_REGISTRY = Dict{Symbol,BuiltinModelEntry}(
         :artifact_public,
         "keemena_public_tokenizer_assets_v1",
         "tiktoken/r50k_base/r50k_base.tiktoken",
-        joinpath(_ARTIFACT_ONLY_ROOT, "tiktoken", "r50k_base", "r50k_base.tiktoken"),
+        _public_model_cache_dir(:tiktoken_r50k_base),
         "OpenAI tiktoken r50k_base encoding.",
         "MIT",
         "openaipublic/encodings",
@@ -143,7 +146,7 @@ const _MODEL_REGISTRY = Dict{Symbol,BuiltinModelEntry}(
         :artifact_public,
         "keemena_public_tokenizer_assets_v1",
         "tiktoken/p50k_base/p50k_base.tiktoken",
-        joinpath(_ARTIFACT_ONLY_ROOT, "tiktoken", "p50k_base", "p50k_base.tiktoken"),
+        _public_model_cache_dir(:tiktoken_p50k_base),
         "OpenAI tiktoken p50k_base encoding.",
         "MIT",
         "openaipublic/encodings",
@@ -155,7 +158,7 @@ const _MODEL_REGISTRY = Dict{Symbol,BuiltinModelEntry}(
         :artifact_public,
         "keemena_public_tokenizer_assets_v1",
         "bpe/openai_gpt2",
-        joinpath(_ARTIFACT_ONLY_ROOT, "bpe", "openai_gpt2"),
+        _public_model_cache_dir(:openai_gpt2_bpe),
         "OpenAI GPT-2 byte-level BPE assets (encoder.json + vocab.bpe).",
         "MIT",
         "openaipublic/gpt-2",
@@ -167,7 +170,7 @@ const _MODEL_REGISTRY = Dict{Symbol,BuiltinModelEntry}(
         :artifact_public,
         "keemena_public_tokenizer_assets_v1",
         "wordpiece/bert_base_uncased/vocab.txt",
-        joinpath(_ARTIFACT_ONLY_ROOT, "wordpiece", "bert_base_uncased", "vocab.txt"),
+        _public_model_cache_dir(:bert_base_uncased_wordpiece),
         "Hugging Face bert-base-uncased WordPiece vocabulary.",
         "Apache-2.0",
         "bert-base-uncased",
@@ -179,7 +182,7 @@ const _MODEL_REGISTRY = Dict{Symbol,BuiltinModelEntry}(
         :artifact_public,
         "keemena_public_tokenizer_assets_v1",
         "sentencepiece/t5_small/spiece.model",
-        joinpath(_ARTIFACT_ONLY_ROOT, "sentencepiece", "t5_small", "spiece.model"),
+        _public_model_cache_dir(:t5_small_sentencepiece_unigram),
         "Hugging Face google-t5/t5-small SentencePiece model (Unigram).",
         "Apache-2.0",
         "google-t5/t5-small",
@@ -191,7 +194,7 @@ const _MODEL_REGISTRY = Dict{Symbol,BuiltinModelEntry}(
         :artifact_public,
         "mistral_v1_sentencepiece",
         "mistral_v1_sentencepiece",
-        joinpath(_ARTIFACT_ONLY_ROOT, "mistral_v1_sentencepiece"),
+        _public_model_cache_dir(:mistral_v1_sentencepiece),
         "Mistral/Mixtral tokenizer.model SentencePiece model.",
         "Apache-2.0",
         "mistralai/Mixtral-8x7B-Instruct-v0.1",
@@ -203,7 +206,7 @@ const _MODEL_REGISTRY = Dict{Symbol,BuiltinModelEntry}(
         :artifact_public,
         "mistral_v3_sentencepiece",
         "mistral_v3_sentencepiece",
-        joinpath(_ARTIFACT_ONLY_ROOT, "mistral_v3_sentencepiece"),
+        _public_model_cache_dir(:mistral_v3_sentencepiece),
         "Mistral-7B-Instruct-v0.3 tokenizer.model.v3 SentencePiece model.",
         "Apache-2.0",
         "mistralai/Mistral-7B-Instruct-v0.3",
@@ -215,7 +218,7 @@ const _MODEL_REGISTRY = Dict{Symbol,BuiltinModelEntry}(
         :artifact_public,
         "phi2_bpe",
         "phi2_bpe",
-        joinpath(_ARTIFACT_ONLY_ROOT, "phi2_bpe"),
+        _public_model_cache_dir(:phi2_bpe),
         "Microsoft Phi-2 GPT2-style tokenizer files (vocab.json + merges.txt).",
         "MIT",
         "microsoft/phi-2",
@@ -227,7 +230,7 @@ const _MODEL_REGISTRY = Dict{Symbol,BuiltinModelEntry}(
         :artifact_public,
         "qwen2_5_bpe",
         "qwen2_5_bpe",
-        joinpath(_ARTIFACT_ONLY_ROOT, "qwen2_5_bpe"),
+        _public_model_cache_dir(:qwen2_5_bpe),
         "Qwen2.5 BPE tokenizer assets (tokenizer.json with vocab/merges fallback).",
         "Apache-2.0",
         "Qwen/Qwen2.5-7B",
@@ -239,7 +242,7 @@ const _MODEL_REGISTRY = Dict{Symbol,BuiltinModelEntry}(
         :artifact_public,
         "bert_base_multilingual_cased_wordpiece",
         "bert_base_multilingual_cased_wordpiece/vocab.txt",
-        joinpath(_ARTIFACT_ONLY_ROOT, "bert_base_multilingual_cased_wordpiece", "vocab.txt"),
+        _public_model_cache_dir(:bert_base_multilingual_cased_wordpiece),
         "Hugging Face bert-base-multilingual-cased WordPiece vocabulary.",
         "Apache-2.0",
         "google-bert/bert-base-multilingual-cased",
@@ -251,7 +254,7 @@ const _MODEL_REGISTRY = Dict{Symbol,BuiltinModelEntry}(
         :artifact_public,
         "roberta_base_bpe",
         "roberta_base_bpe",
-        joinpath(_ARTIFACT_ONLY_ROOT, "roberta_base_bpe"),
+        _public_model_cache_dir(:roberta_base_bpe),
         "RoBERTa-base byte-level BPE tokenizer files (vocab.json + merges.txt).",
         "MIT",
         "FacebookAI/roberta-base",
@@ -263,7 +266,7 @@ const _MODEL_REGISTRY = Dict{Symbol,BuiltinModelEntry}(
         :artifact_public,
         "xlm_roberta_base_sentencepiece_bpe",
         "xlm_roberta_base_sentencepiece_bpe",
-        joinpath(_ARTIFACT_ONLY_ROOT, "xlm_roberta_base_sentencepiece_bpe"),
+        _public_model_cache_dir(:xlm_roberta_base_sentencepiece_bpe),
         "XLM-RoBERTa-base sentencepiece.bpe.model file.",
         "MIT",
         "FacebookAI/xlm-roberta-base",
@@ -898,13 +901,22 @@ function prefetch_models(
 )::Dict{Symbol,Bool}
     _ensure_local_models_loaded()
     availability = Dict{Symbol,Bool}()
+    artifact_status = Dict{String,Bool}()
 
     for key in keys
         haskey(_MODEL_REGISTRY, key) || throw(ArgumentError("Unknown built-in model: $key"))
         entry = _MODEL_REGISTRY[key]
+        artifact_name = entry.artifact_name
+        if artifact_name !== nothing && !haskey(artifact_status, artifact_name)
+            artifact_status[artifact_name] = _ensure_artifact_installed(artifact_name; force=force)
+        end
+    end
 
-        if entry.artifact_name !== nothing
-            _ensure_artifact_installed(entry.artifact_name; force=force)
+    for key in keys
+        entry = _MODEL_REGISTRY[key]
+        artifact_ok = entry.artifact_name === nothing ? false : get(artifact_status, entry.artifact_name, false)
+        if !artifact_ok && entry.distribution == :artifact_public
+            _ensure_public_model_cached!(key, entry; force=force)
         end
 
         resolved = _resolve_model_path(entry)
@@ -1008,6 +1020,9 @@ function _resolve_model_source(entry::BuiltinModelEntry, resolved::String)::Symb
     end
 
     if ispath(resolved)
+        if startswith(normpath(resolved), normpath(_CACHE_ROOT))
+            return :cache
+        end
         if startswith(normpath(resolved), normpath(joinpath(_PACKAGE_ROOT, "models")))
             return :in_repo
         end
@@ -1245,15 +1260,27 @@ function _ensure_artifact_installed(artifact_name::String; force::Bool=false)::B
     hash = Artifacts.artifact_hash(artifact_name, _ARTIFACTS_TOML)
     hash === nothing && return false
 
+    if !force && haskey(_ARTIFACT_INSTALL_STATUS, artifact_name) && !_ARTIFACT_INSTALL_STATUS[artifact_name]
+        return Artifacts.artifact_exists(hash)
+    end
+
     if !Artifacts.artifact_exists(hash) || force
         try
             Base.invokelatest(Artifacts.ensure_artifact_installed, artifact_name, _ARTIFACTS_TOML)
-        catch
-            # Keep failure non-fatal; callers can still rely on existing artifacts.
+        catch err
+            _ARTIFACT_INSTALL_STATUS[artifact_name] = false
+            @warn(
+                "Failed to install artifact",
+                artifact=artifact_name,
+                urls=_artifact_download_urls(artifact_name),
+                error=sprint(showerror, err),
+            )
         end
     end
 
-    return Artifacts.artifact_exists(hash)
+    available = Artifacts.artifact_exists(hash)
+    _ARTIFACT_INSTALL_STATUS[artifact_name] = available
+    return available
 end
 
 function _artifact_root(artifact_name::Union{Nothing,String})::Union{Nothing,String}
@@ -1264,4 +1291,91 @@ function _artifact_root(artifact_name::Union{Nothing,String})::Union{Nothing,Str
     hash === nothing && return nothing
     Artifacts.artifact_exists(hash) || return nothing
     return Artifacts.artifact_path(hash)
+end
+
+function _artifact_download_urls(artifact_name::String)::Vector{String}
+    isfile(_ARTIFACTS_TOML) || return String[]
+    parsed = try
+        TOML.parsefile(_ARTIFACTS_TOML)
+    catch
+        return String[]
+    end
+
+    section = get(parsed, artifact_name, nothing)
+    section isa AbstractDict || return String[]
+    downloads = get(section, "download", nothing)
+    urls = String[]
+    if downloads isa AbstractVector
+        for item in downloads
+            item isa AbstractDict || continue
+            url = get(item, "url", nothing)
+            url isa AbstractString && push!(urls, String(url))
+        end
+    elseif downloads isa AbstractDict
+        url = get(downloads, "url", nothing)
+        url isa AbstractString && push!(urls, String(url))
+    end
+    return urls
+end
+
+function _sha256_hex(path::AbstractString)::String
+    open(path, "r") do io
+        return bytes2hex(SHA.sha256(io))
+    end
+end
+
+function _public_cache_target_path(entry::BuiltinModelEntry, file_info::_UPSTREAM_FILE_INFO)::String
+    target_dir = entry.fallback_path
+    name = basename(file_info.relative_path)
+    return joinpath(target_dir, name)
+end
+
+function _ensure_public_model_cached!(
+    key::Symbol,
+    entry::BuiltinModelEntry;
+    force::Bool=false,
+)::Bool
+    upstream = get(_MODEL_UPSTREAM_FILES, key, Vector{_UPSTREAM_FILE_INFO}())
+    isempty(upstream) && return false
+
+    target_dir = entry.fallback_path
+    mkpath(target_dir)
+
+    for file_info in upstream
+        target_path = _public_cache_target_path(entry, file_info)
+        expected_sha = file_info.sha256
+
+        if isfile(target_path) && !force
+            if expected_sha === nothing
+                continue
+            end
+            lowercase(_sha256_hex(target_path)) == lowercase(expected_sha) && continue
+        end
+
+        tmp_path = target_path * ".download"
+        rm(tmp_path; force=true)
+        try
+            Downloads.download(file_info.url, tmp_path)
+            if expected_sha !== nothing
+                actual_sha = lowercase(_sha256_hex(tmp_path))
+                actual_sha == lowercase(expected_sha) || throw(ArgumentError(
+                    "Checksum mismatch for $(file_info.url): expected $(expected_sha), got $(actual_sha)",
+                ))
+            end
+            mv(tmp_path, target_path; force=true)
+        catch err
+            rm(tmp_path; force=true)
+            @warn(
+                "Failed to cache public model file",
+                model=key,
+                url=file_info.url,
+                target=target_path,
+                error=sprint(showerror, err),
+            )
+            return false
+        end
+    end
+
+    files = _resolved_model_files(entry, target_dir)
+    return !isempty(files) && all(ispath, files)
 end

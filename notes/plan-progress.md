@@ -1197,3 +1197,59 @@ Implement section `## 17)` hardening work for conformance, structured outputs, a
 - HF tokenizer.json core compliance expansions from section 15 are now backed by additional conformance goldens and section-17 regression coverage.
 - Python remains optional and maintainer-only for golden regeneration; runtime/test execution remains Julia-only.
 
+
+## 2026-02-10 - Iteration 18
+
+### Objective
+Implement section `## 18)` to stabilize CI around artifact-backed models, fix registry/test contract mismatches, and make artifact/download diagnostics robust.
+
+### Completed section-18 implementation
+
+#### A) GPT-2 registry/test mismatch resolved
+- Updated the model registry test invariant in `test/runtests.jl`:
+  - replaced brittle `length(gpt2_info.files) == 2` with format-contract assertions on `expected_files` for GPT-2 (`vocab.json + merges.txt` and `encoder.json + vocab.bpe`).
+- This keeps registry correctness checks independent from artifact installation state.
+
+#### B) Artifact robustness + diagnostics
+- Added artifact verification tooling:
+  - `tools/verify_artifacts.jl`
+  - verifies artifact binding/hash, runs `ensure_artifact_installed`, prints attempted URLs and precise errors.
+- Hardened artifact installation behavior in `src/models.jl`:
+  - artifact installation attempts are memoized per artifact in-process to reduce repeated retries.
+  - failure logs now include artifact name, candidate URLs, and exception message.
+
+#### C) Public-model cache fallback (artifact-first, cache fallback)
+- Refactored artifact-public model fallback paths in `src/models.jl`:
+  - artifact-backed entries now resolve fallback path under user cache (`KEEMENA_SUBWORDS_CACHE_DIR` / depot cache), not package-local placeholders under `models/_artifacts_only`.
+- Added public fallback installer path in `prefetch_models`:
+  - artifacts are still preferred.
+  - if artifact install is unavailable, public upstream files are downloaded to cache with optional SHA-256 verification from registry metadata.
+- This preserves the built-in key UX while removing dependence on package-tree placeholder directories.
+
+#### D) Deterministic tests + reduced download spam
+- Updated section-9 tests in `test/runtests.jl`:
+  - split registry metadata checks from download integration checks.
+  - network/download integration runs only when `KEEMENA_TEST_DOWNLOADS=1` (legacy `KEEMENA_RUN_NETWORK_TESTS` still honored).
+  - avoids repeated prefetch attempts in default CI.
+  - avoids unhandled exceptions by keeping model load assertions in explicit guarded test paths.
+- Updated test suite label to `KeemenaSubwords sections 1-18`.
+
+#### E) CI defaults and dependency coherence
+- Added `KEEMENA_TEST_DOWNLOADS: "0"` in `.github/workflows/CI.yml` test job for deterministic default CI behavior.
+- Added stdlib dependency declaration for `SHA` in `Project.toml` because the cache verifier now computes SHA-256 for downloaded files.
+
+### Verification
+- Ran: `julia --project=. -e 'using Pkg; Pkg.test()'`
+  - Result: `323/323` tests passed (`KeemenaSubwords sections 1-18`) with download integration disabled by default.
+- Ran: `KEEMENA_TEST_DOWNLOADS=1 julia --project=. -e 'using Pkg; Pkg.test()'`
+  - Result: `334/334` tests passed (`KeemenaSubwords sections 1-18`) with download integration enabled.
+- Ran: `julia --project=. tools/check_docs_examples.jl`
+  - Result: passed.
+- Ran: `julia --project=docs docs/make.jl`
+  - Result: docs build/doctests passed (local deploy skipped as expected).
+- Ran: `julia --project=. tools/verify_artifacts.jl`
+  - Result: all configured tokenizer artifacts verified successfully in current environment.
+
+### Notes
+- Section 18 now enforces a stable offline/CI baseline while still supporting explicit download integration testing.
+- Artifact diagnostics are now actionable if a future hosting/checksum issue appears in CI.
