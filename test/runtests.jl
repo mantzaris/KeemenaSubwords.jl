@@ -4,8 +4,9 @@ using KeemenaSubwords
 const FIXTURES_DIR = joinpath(@__DIR__, "fixtures")
 fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
 const _DOWNLOAD_TESTS = get(ENV, "KEEMENA_TEST_DOWNLOADS", get(ENV, "KEEMENA_RUN_NETWORK_TESTS", "0")) == "1"
+include("helpers/corpus.jl")
 
-@testset "KeemenaSubwords sections 1-20" begin
+@testset "KeemenaSubwords sections 1-21" begin
     @testset "Model registry" begin
         names = available_models()
         @test :core_bpe_en in names
@@ -230,6 +231,51 @@ const _DOWNLOAD_TESTS = get(ENV, "KEEMENA_TEST_DOWNLOADS", get(ENV, "KEEMENA_RUN
         # TemplateProcessing should prepend [SPECIAL] when requested
         templated = encode(hf_added, "i love !"; add_special_tokens=true)
         @test token_to_id(hf_added, "[SPECIAL]") == first(templated)
+
+        hf_realistic = load_hf_tokenizer_json(fixture("hf_json_realistic_pipeline", "tokenizer.json"))
+        @test hf_realistic isa HuggingFaceJSONTokenizer
+
+        # Added-token overlap should prefer the longest matching token.
+        ids_overlap = encode(hf_realistic, "I love <city_center> !"; add_special_tokens=false)
+        @test token_to_id(hf_realistic, "<CITY_CENTER>") in ids_overlap
+        @test !(token_to_id(hf_realistic, "<CITY>") in ids_overlap)
+
+        # Added-token single_word should reject embedded matches.
+        ids_inline = encode(hf_realistic, "prefix<city>suffix"; add_special_tokens=false)
+        @test !(token_to_id(hf_realistic, "<CITY>") in ids_inline)
+
+        # Special tokens bypass normalization and match verbatim.
+        ids_special_case = encode(hf_realistic, "[SPECIAL] i"; add_special_tokens=false)
+        @test token_to_id(hf_realistic, "[SPECIAL]") == first(ids_special_case)
+        ids_not_special = encode(hf_realistic, "[special] i"; add_special_tokens=false)
+        @test token_to_id(hf_realistic, "[SPECIAL]") != first(ids_not_special)
+
+        # TemplateProcessing should insert [CLS]/[SEP] in single sequence mode.
+        templated_realistic = encode(hf_realistic, "I love city"; add_special_tokens=true)
+        @test first(templated_realistic) == token_to_id(hf_realistic, "[CLS]")
+        @test last(templated_realistic) == token_to_id(hf_realistic, "[SEP]")
+
+        hf_fallback = load_hf_tokenizer_json(fixture("hf_json_byte_fallback", "tokenizer.json"))
+        @test hf_fallback isa HuggingFaceJSONTokenizer
+
+        # Byte fallback should avoid UNK for unseen bytes when byte tokens exist.
+        euro_ids = encode(hf_fallback, "€"; add_special_tokens=false)
+        @test !isempty(euro_ids)
+        @test !(token_to_id(hf_fallback, "<unk>") in euro_ids)
+
+        emoji_ids = encode(hf_fallback, "😀"; add_special_tokens=false)
+        @test !isempty(emoji_ids)
+        @test !(token_to_id(hf_fallback, "<unk>") in emoji_ids)
+
+        # Run representative corpus subset through multiple HF fixtures.
+        hf_subset = edge_case_corpus_subset(18; include_long=false, nonempty_only=true)
+        @test length(hf_subset) >= 12
+        for text in hf_subset
+            @test encode(hf_bpe, text; add_special_tokens=false) isa Vector{Int}
+            @test decode(hf_bpe, encode(hf_bpe, text; add_special_tokens=false)) isa String
+            @test encode(hf_realistic, text; add_special_tokens=false) isa Vector{Int}
+            @test decode(hf_realistic, encode(hf_realistic, text; add_special_tokens=false)) isa String
+        end
     end
 
     @testset "Section 9 built-in public baseline keys" begin
@@ -683,6 +729,17 @@ const _DOWNLOAD_TESTS = get(ENV, "KEEMENA_TEST_DOWNLOADS", get(ENV, "KEEMENA_RUN
         end
     end
 
+    @testset "Section 21 shared edge-case corpus" begin
+        corpus = load_edge_case_corpus(; include_long=true)
+        @test length(corpus) >= 100
+        @test any(s -> any(!isascii, s), corpus)
+        @test any(s -> occursin('\n', s), corpus)
+        @test any(s -> occursin("😀", s), corpus)
+        @test any(s -> length(s) >= 8192, corpus)
+    end
+
     include("e2e_user_workflows.jl")
+    include("e2e_user_workflows_extended.jl")
     include("test_goldens.jl")
+    include("test_minimal_expected_ids.jl")
 end

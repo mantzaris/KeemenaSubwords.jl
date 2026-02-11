@@ -1433,3 +1433,85 @@ Implement section `## 20)` to harden end-user asset UX and concurrency behavior,
 ### Notes
 - Normal users now see concise success messages for fallback recovery instead of noisy artifact failure output.
 - Maintainers still have full diagnostics available through status APIs and debug env logging.
+
+## 2026-02-11 - Iteration 21
+
+### Objective
+Implement section `## 21)` by expanding real-world test coverage with a shared edge-case corpus, cross-tokenizer E2E workflows, stronger HF tokenizer.json assertions, minimal pinned expected-id checks, and more realistic gated download-lane usage.
+
+### Completed section-21 implementation
+
+#### A) Shared edge-case corpus (single source for broad text coverage)
+- Added `test/corpus/tokenization_edge_cases.toml` with 100+ curated strings across categories:
+  - ASCII baseline
+  - whitespace/newline/tab-heavy inputs
+  - Unicode normalization-sensitive inputs
+  - emoji/symbol sequences
+  - mixed scripts
+  - RTL examples
+  - special-token-like strings
+- Added generated long-input definitions (8k/16k/32k) in the corpus file.
+- Added `test/helpers/corpus.jl`:
+  - `load_edge_case_corpus_categories(; include_long=true)`
+  - `load_edge_case_corpus(; include_long=true)`
+  - `edge_case_corpus_subset(n; include_long=false, nonempty_only=true)`
+
+#### B) Stronger HF tokenizer.json fixture coverage
+- Added new realistic HF fixture:
+  - `test/fixtures/hf_json_realistic_pipeline/tokenizer.json`
+  - includes normalizer/pretokenizer sequences, TemplateProcessing, decoder, and overlapping added tokens.
+- Added byte-fallback-focused HF fixture:
+  - `test/fixtures/hf_json_byte_fallback/tokenizer.json`
+  - exercises BPE byte fallback with explicit byte tokens.
+- Expanded `Section 15 Hugging Face compliance expansion` tests in `test/runtests.jl`:
+  - added-token longest match
+  - `single_word` boundary behavior
+  - special-token bypass behavior
+  - template special token insertion checks
+  - byte-fallback assertions for unseen-byte inputs
+  - corpus-subset robustness loop (encode/decode smoke over many diverse strings)
+
+#### C) Cross-tokenizer E2E user workflows (clearly separated)
+- Added new file `test/e2e_user_workflows_extended.jl` and included it from `test/runtests.jl`.
+- Added top-level testset `Section 21 E2E user workflows extended` with:
+  - one-call API workflows over shared corpus subsets across families:
+    - BPE, WordPiece, SentencePiece, HF tokenizer.json, tiktoken fixture
+  - local registration workflow over corpus subset
+  - long-input smoke tests
+  - realistic download-enabled gated workflow (`KEEMENA_TEST_DOWNLOADS=1`) using corpus subsets for:
+    - `:tiktoken_o200k_base`
+    - `:openai_gpt2_bpe`
+    - `:bert_base_uncased_wordpiece`
+    - `:t5_small_sentencepiece_unigram`
+    - `:qwen2_5_bpe`
+  - cache reuse checks via `cached_tokenizers()`.
+
+#### D) Minimal pinned expected-id regressions
+- Added `test/golden/minimal_expected_ids.toml` with exact expected IDs for representative models:
+  - `core_bpe_en`
+  - `core_wordpiece_en`
+  - `core_sentencepiece_unigram_en`
+  - fixture HF tokenizer.json WordPiece
+  - fixture tiktoken model
+- Added `test/test_minimal_expected_ids.jl` to validate exact IDs against this TOML.
+
+#### E) Test harness wiring updates
+- Updated `test/runtests.jl`:
+  - includes corpus helper (`include("helpers/corpus.jl")`)
+  - includes new extended E2E file
+  - includes minimal expected-ids test file
+  - adds shared corpus sanity testset
+  - top-level label updated to `KeemenaSubwords sections 1-21`.
+
+### Verification
+- Ran: `julia --project=. -e 'using Pkg; Pkg.test()'`
+  - Result: `1743/1743` tests passed (`KeemenaSubwords sections 1-21`) in default/offline lane.
+- Ran: `KEEMENA_TEST_DOWNLOADS=1 julia --project=. -e 'using Pkg; Pkg.test()'`
+  - Result: `1962/1962` tests passed in download-enabled lane.
+- Ran: `julia --project=. tools/check_docs_examples.jl`
+  - Result: docs example consistency checks passed.
+
+### Notes
+- Section 21 adds broader user-story coverage while keeping default CI deterministic and offline-stable.
+- Download-lane tests now exercise a realistic text subset and one-call cache flow, not only single-string smoke cases.
+

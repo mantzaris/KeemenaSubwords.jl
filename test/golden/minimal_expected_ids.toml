@@ -1,0 +1,153 @@
+version = 1
+description = "Small pinned id vectors for fast regression detection."
+
+[[models]]
+name = "core_bpe_en"
+source_kind = "key"
+source = "core_bpe_en"
+format = "bpe"
+add_special_tokens = false
+
+[[models.cases]]
+text = "hello world"
+expected_ids = [24, 29]
+
+[[models.cases]]
+text = "hello   world"
+expected_ids = [24, 29]
+
+[[models.cases]]
+text = "[CLS] hello [SEP]"
+expected_ids = [1, 24, 1]
+
+[[models.cases]]
+text = "line1\nline2"
+expected_ids = [1, 1]
+
+[[models.cases]]
+text = "emoji 😀 test"
+expected_ids = [1, 1, 1]
+
+[[models.cases]]
+text = "  leading and trailing  "
+expected_ids = [1, 16, 15, 12, 5, 1]
+
+[[models]]
+name = "core_wordpiece_en"
+source_kind = "key"
+source = "core_wordpiece_en"
+format = "wordpiece_vocab"
+add_special_tokens = false
+
+[[models.cases]]
+text = "hello world"
+expected_ids = [6, 7]
+
+[[models.cases]]
+text = "hello   world"
+expected_ids = [6, 7]
+
+[[models.cases]]
+text = "[CLS] hello [SEP]"
+expected_ids = [3, 6, 4]
+
+[[models.cases]]
+text = "line1\nline2"
+expected_ids = [2, 2]
+
+[[models.cases]]
+text = "emoji 😀 test"
+expected_ids = [2, 2, 2]
+
+[[models.cases]]
+text = "  leading and trailing  "
+expected_ids = [2, 2, 2]
+
+[[models]]
+name = "core_sentencepiece_unigram_en"
+source_kind = "key"
+source = "core_sentencepiece_unigram_en"
+format = "sentencepiece_model"
+add_special_tokens = false
+
+[[models.cases]]
+text = "hello world"
+expected_ids = [4, 5]
+
+[[models.cases]]
+text = "hello   world"
+expected_ids = [4, 5]
+
+[[models.cases]]
+text = "[CLS] hello [SEP]"
+expected_ids = [1, 4, 1]
+
+[[models.cases]]
+text = "line1\nline2"
+expected_ids = [1, 1]
+
+[[models.cases]]
+text = "emoji 😀 test"
+expected_ids = [1, 1, 1]
+
+[[models.cases]]
+text = "  leading and trailing  "
+expected_ids = [1, 1, 1]
+
+[[models]]
+name = "fixture_hf_json_wordpiece"
+source_kind = "path"
+source = "fixtures/hf_json_wordpiece"
+format = "hf_tokenizer_json"
+add_special_tokens = false
+
+[[models.cases]]
+text = "hello world"
+expected_ids = [5, 6]
+
+[[models.cases]]
+text = "hello   world"
+expected_ids = [5, 6]
+
+[[models.cases]]
+text = "[CLS] hello [SEP]"
+expected_ids = [3, 5, 4]
+
+[[models.cases]]
+text = "line1\nline2"
+expected_ids = [2, 2]
+
+[[models.cases]]
+text = "emoji 😀 test"
+expected_ids = [2, 2, 2]
+
+[[models.cases]]
+text = "  leading and trailing  "
+expected_ids = [2, 2, 2]
+
+[[models]]
+name = "fixture_tiktoken_model"
+source_kind = "path"
+source = "fixtures/tiktoken_model/tokenizer.model"
+format = "tiktoken"
+add_special_tokens = false
+
+[[models.cases]]
+text = "hi"
+expected_ids = [2, 3]
+
+[[models.cases]]
+text = "hello"
+expected_ids = [2, 6, 4, 4, 5]
+
+[[models.cases]]
+text = "hi hi"
+expected_ids = [2, 3, 1, 2, 3]
+
+[[models.cases]]
+text = "hello hi"
+expected_ids = [2, 6, 4, 4, 5, 1, 2, 3]
+
+[[models.cases]]
+text = "hi hello"
+expected_ids = [2, 3, 1, 2, 6, 4, 4, 5]

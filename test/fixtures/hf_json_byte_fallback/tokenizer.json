@@ -1,0 +1,31 @@
+{
+  "version": "1.0",
+  "normalizer": {"type": "Lowercase"},
+  "pre_tokenizer": {"type": "WhitespaceSplit"},
+  "decoder": {"type": "BPEDecoder", "suffix": "</w>"},
+  "model": {
+    "type": "BPE",
+    "unk_token": "<unk>",
+    "byte_fallback": true,
+    "fuse_unk": false,
+    "dropout": null,
+    "end_of_word_suffix": "</w>",
+    "vocab": {
+      "<unk>": 0,
+      "</w>": 1,
+      "a": 2,
+      "a</w>": 3,
+      "<0xE2>": 4,
+      "<0x82>": 5,
+      "<0xAC>": 6,
+      "<0xF0>": 7,
+      "<0x9F>": 8,
+      "<0x98>": 9,
+      "<0x80>": 10
+    },
+    "merges": [
+      "a </w>"
+    ]
+  },
+  "added_tokens": []
+}

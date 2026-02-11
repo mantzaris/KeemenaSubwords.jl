@@ -1,0 +1,68 @@
+{
+  "version": "1.0",
+  "normalizer": {
+    "type": "Sequence",
+    "normalizers": [
+      {"type": "NFKC"},
+      {"type": "Lowercase"},
+      {"type": "Replace", "pattern": {"String": "\\n"}, "content": " "}
+    ]
+  },
+  "pre_tokenizer": {
+    "type": "Sequence",
+    "pretokenizers": [
+      {"type": "WhitespaceSplit"},
+      {"type": "Punctuation", "behavior": "isolated"},
+      {"type": "Digits", "individual_digits": true}
+    ]
+  },
+  "post_processor": {
+    "type": "TemplateProcessing",
+    "single": [
+      {"SpecialToken": {"id": "[CLS]", "type_id": 0}},
+      {"Sequence": {"id": "A", "type_id": 0}},
+      {"SpecialToken": {"id": "[SEP]", "type_id": 0}}
+    ],
+    "special_tokens": [
+      {"id": "[CLS]", "ids": [1], "tokens": ["[CLS]"]},
+      {"id": "[SEP]", "ids": [2], "tokens": ["[SEP]"]}
+    ]
+  },
+  "decoder": {
+    "type": "Sequence",
+    "decoders": [
+      {"type": "WordPiece", "prefix": "##"}
+    ]
+  },
+  "model": {
+    "type": "WordPiece",
+    "unk_token": "[UNK]",
+    "continuing_subword_prefix": "##",
+    "max_input_chars_per_word": 64,
+    "vocab": {
+      "[UNK]": 0,
+      "[CLS]": 1,
+      "[SEP]": 2,
+      "i": 3,
+      "love": 4,
+      "city": 5,
+      "center": 6,
+      "!": 7,
+      ".": 8,
+      ",": 9,
+      "1": 10,
+      "2": 11,
+      "3": 12,
+      "##0": 13,
+      "##1": 14,
+      "##2": 15
+    }
+  },
+  "added_tokens": [
+    {"id": 16, "content": "<CITY>", "single_word": true, "lstrip": true, "rstrip": true, "normalized": true, "special": false},
+    {"id": 17, "content": "<CITY_CENTER>", "single_word": true, "lstrip": true, "rstrip": true, "normalized": true, "special": false},
+    {"id": 18, "content": "[SPECIAL]", "single_word": false, "lstrip": false, "rstrip": false, "normalized": false, "special": true}
+  ],
+  "truncation": {"max_length": 128, "strategy": "longest_first", "stride": 0, "direction": "right"},
+  "padding": {"strategy": "batch_longest", "direction": "right", "pad_id": 0, "pad_type_id": 0, "pad_token": "[PAD]"}
+}

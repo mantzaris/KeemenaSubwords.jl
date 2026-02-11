@@ -1,0 +1,148 @@
+version = 1
+description = "Shared edge-case corpus for tokenizer behavior and E2E workflow coverage."
+
+[categories]
+ascii = [
+  "hello",
+  "hello world",
+  "The quick brown fox jumps over the lazy dog.",
+  "tokenization baseline",
+  "numbers 12345",
+  "punctuation !?,.;:-",
+  "parentheses (a+b)",
+  "quotes \"double\" and 'single'",
+  "url https://example.com/path?q=1",
+  "email test@example.com",
+  "snake_case_identifier",
+  "kebab-case-example",
+  "camelCaseInput",
+  "JSON-like {\"a\":1,\"b\":2}",
+  "math 1+1=2",
+  "C:\\Users\\name\\file.txt",
+  "/usr/local/bin/run",
+  "version v1.2.3",
+  "0xDEADBEEF",
+  "EdgeCase42",
+]
+
+whitespace = [
+  " leading space",
+  "trailing space ",
+  "  both sides  ",
+  "multiple   internal   spaces",
+  "\tleading tab",
+  "trailing tab\t",
+  "tab\tseparated\tvalues",
+  "line1\nline2",
+  "line1\n\nline3",
+  "carriage\rreturn",
+  "windows\r\nline",
+  "mix \t of \n whitespace",
+  "    ",
+  "\t\t",
+  "\n",
+  " \n\t ",
+  "word\tword",
+  "word\nword",
+  "word \n word",
+  "a\tb\nc",
+]
+
+unicode = [
+  "café",
+  "cafe\u0301",
+  "mañana",
+  "naïve",
+  "coöperate",
+  "résumé",
+  "élève",
+  "Ångström",
+  "straße",
+  "İstanbul",
+  "Łódź",
+  "smørrebrød",
+  "François",
+  "niño",
+  "São Paulo",
+  "ﬁ ligature",
+  "① ② ③",
+  "Ⅳ vs IV",
+  "a\u0301 e\u0301 i\u0301 o\u0301 u\u0301",
+  "Z͑a͒l̓g̈́o͂ text",
+]
+
+emoji_symbols = [
+  "emoji 😀",
+  "emoji 😁😂🤣",
+  "thumbs 👍",
+  "skin tone 👍🏽",
+  "family 👨‍👩‍👧‍👦",
+  "flags 🇺🇸🇬🇷",
+  "rocket 🚀✨",
+  "heart ❤️",
+  "variation selector ✊🏽",
+  "keycap 1️⃣ 2️⃣",
+  "symbols ™©®",
+  "math ∑∫≈≠",
+  "currency $ € ¥ ₹",
+  "arrows ← → ↔",
+  "box drawing ─│┌┐",
+  "music ♪♫",
+  "check ✓✗",
+  "snowman ☃",
+  "chess ♞♜",
+  "infinity ∞",
+]
+
+mixed_scripts = [
+  "English Ελληνικά Русский",
+  "Latin кириллица 漢字",
+  "abc אבג 123",
+  "한국어 and English",
+  "日本語 mixed with English",
+  "中文 mixed with punctuation!",
+  "Привет world",
+  "γειά σου world",
+  "مرحبا world",
+  "हिन्दी English",
+  "தமிழ் English",
+  "বাংলা text",
+  "ไทย text",
+  "עברית English",
+  "emoji 😀 中文 русский",
+]
+
+rtl = [
+  "مرحبا",
+  "السلام عليكم",
+  "שלום",
+  "שלום עולם",
+  "עברית מימין לשמאל",
+  "العربية من اليمين إلى اليسار",
+  "مرحبا hello",
+  "hello שלום",
+  "123 مرحبا 456",
+  "[CLS] שלום [SEP]",
+]
+
+special_tokens = [
+  "[CLS] hello [SEP]",
+  "<s> hello </s>",
+  "<pad>token</pad>",
+  "[MASK] token",
+  "[UNK]",
+  "<unk>",
+  "<CITY>",
+  "<city>",
+  "<city_center>",
+  "[SPECIAL] i",
+  "<|assistant|> Hello",
+  "<|user|> hi",
+  "<|endoftext|>",
+  "tokenizer.model",
+  "tokenizer.json",
+]
+
+[generated]
+long_seed = "keemena-subwords-long-input-0123456789 "
+long_lengths = [8192, 16384, 32768]
