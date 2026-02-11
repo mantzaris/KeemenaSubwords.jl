@@ -188,6 +188,189 @@ function load_tokenizer(spec::FilesSpec; kwargs...)::AbstractSubwordTokenizer
     return load_tokenizer(_filespec_to_namedtuple(spec); kwargs...)
 end
 
+const _TOKENIZER_CACHE = Dict{Tuple{Symbol,String,Symbol},AbstractSubwordTokenizer}()
+const _TOKENIZER_CACHE_LOCK = ReentrantLock()
+
+_cache_format(format::Union{Nothing,Symbol}) = format === nothing ? :auto : _canonical_load_format(format)
+
+function _tokenizer_cache_key(source::Symbol, format::Union{Nothing,Symbol})::Tuple{Symbol,String,Symbol}
+    return (:model_key, String(source), _cache_format(format))
+end
+
+function _tokenizer_cache_key(source::AbstractString, format::Union{Nothing,Symbol})::Tuple{Symbol,String,Symbol}
+    return (:path, normpath(String(source)), _cache_format(format))
+end
+
+"""
+Return a cached tokenizer for a model key or path, loading and caching on first use.
+"""
+function get_tokenizer_cached(
+    source::Symbol;
+    format::Union{Nothing,Symbol}=nothing,
+    prefetch::Bool=true,
+)::AbstractSubwordTokenizer
+    key = _tokenizer_cache_key(source, format)
+    lock(_TOKENIZER_CACHE_LOCK) do
+        haskey(_TOKENIZER_CACHE, key) && return _TOKENIZER_CACHE[key]
+    end
+
+    tok = if format === nothing || format == :auto
+        load_tokenizer(source; prefetch=prefetch)
+    else
+        path = model_path(source; auto_prefetch=prefetch)
+        load_tokenizer(path; format=_canonical_load_format(format), model_name=String(source))
+    end
+
+    lock(_TOKENIZER_CACHE_LOCK) do
+        return get!(_TOKENIZER_CACHE, key, tok)
+    end
+end
+
+function get_tokenizer_cached(
+    source::AbstractString;
+    format::Union{Nothing,Symbol}=nothing,
+    prefetch::Bool=true,
+)::AbstractSubwordTokenizer
+    key = _tokenizer_cache_key(source, format)
+    lock(_TOKENIZER_CACHE_LOCK) do
+        haskey(_TOKENIZER_CACHE, key) && return _TOKENIZER_CACHE[key]
+    end
+
+    selected = format === nothing ? :auto : _canonical_load_format(format)
+    tok = load_tokenizer(String(source); format=selected)
+
+    lock(_TOKENIZER_CACHE_LOCK) do
+        return get!(_TOKENIZER_CACHE, key, tok)
+    end
+end
+
+"""
+Clear the in-session tokenizer cache used by one-call convenience APIs.
+"""
+function clear_tokenizer_cache!()::Nothing
+    lock(_TOKENIZER_CACHE_LOCK) do
+        empty!(_TOKENIZER_CACHE)
+    end
+    return nothing
+end
+
+"""
+List cache keys for in-session cached tokenizers.
+"""
+function cached_tokenizers()::Vector{Tuple{Symbol,String,Symbol}}
+    lock(_TOKENIZER_CACHE_LOCK) do
+        return sort!(collect(keys(_TOKENIZER_CACHE)); by=string)
+    end
+end
+
+"""
+One-call tokenize by model key.
+"""
+function tokenize(
+    source::Symbol,
+    text::AbstractString;
+    format::Union{Nothing,Symbol}=nothing,
+    prefetch::Bool=true,
+)::Vector{String}
+    tok = get_tokenizer_cached(source; format=format, prefetch=prefetch)
+    return tokenize(tok, text)
+end
+
+"""
+One-call tokenize by tokenizer path/directory.
+"""
+function tokenize(
+    source::AbstractString,
+    text::AbstractString;
+    format::Union{Nothing,Symbol}=nothing,
+    prefetch::Bool=true,
+)::Vector{String}
+    tok = get_tokenizer_cached(source; format=format, prefetch=prefetch)
+    return tokenize(tok, text)
+end
+
+"""
+One-call encode by model key.
+"""
+function encode(
+    source::Symbol,
+    text::AbstractString;
+    format::Union{Nothing,Symbol}=nothing,
+    prefetch::Bool=true,
+    kwargs...,
+)::Vector{Int}
+    tok = get_tokenizer_cached(source; format=format, prefetch=prefetch)
+    return encode(tok, text; kwargs...)
+end
+
+"""
+One-call encode by tokenizer path/directory.
+"""
+function encode(
+    source::AbstractString,
+    text::AbstractString;
+    format::Union{Nothing,Symbol}=nothing,
+    prefetch::Bool=true,
+    kwargs...,
+)::Vector{Int}
+    tok = get_tokenizer_cached(source; format=format, prefetch=prefetch)
+    return encode(tok, text; kwargs...)
+end
+
+"""
+One-call structured encode by model key.
+"""
+function encode_result(
+    source::Symbol,
+    text::AbstractString;
+    format::Union{Nothing,Symbol}=nothing,
+    prefetch::Bool=true,
+    kwargs...,
+)::TokenizationResult
+    tok = get_tokenizer_cached(source; format=format, prefetch=prefetch)
+    return encode_result(tok, text; kwargs...)
+end
+
+"""
+One-call structured encode by tokenizer path/directory.
+"""
+function encode_result(
+    source::AbstractString,
+    text::AbstractString;
+    format::Union{Nothing,Symbol}=nothing,
+    prefetch::Bool=true,
+    kwargs...,
+)::TokenizationResult
+    tok = get_tokenizer_cached(source; format=format, prefetch=prefetch)
+    return encode_result(tok, text; kwargs...)
+end
+
+"""
+One-call decode by model key.
+"""
+function decode(
+    source::Symbol,
+    ids::AbstractVector{<:Integer};
+    format::Union{Nothing,Symbol}=nothing,
+    prefetch::Bool=true,
+)::String
+    tok = get_tokenizer_cached(source; format=format, prefetch=prefetch)
+    return decode(tok, ids)
+end
+
+"""
+One-call decode by tokenizer path/directory.
+"""
+function decode(
+    source::AbstractString,
+    ids::AbstractVector{<:Integer};
+    format::Union{Nothing,Symbol}=nothing,
+    prefetch::Bool=true,
+)::String
+    tok = get_tokenizer_cached(source; format=format, prefetch=prefetch)
+    return decode(tok, ids)
+end
+
 function _filespec_to_namedtuple(spec::FilesSpec)::NamedTuple
     pairs = Pair{Symbol,Any}[:format => spec.format]
     _push_filespec_pair!(pairs, :path, spec.path)

@@ -16,6 +16,8 @@ const _LOCAL_MODEL_RESOLVED_FILES = Dict{Symbol,Vector{String}}()
 const _LOCAL_MODEL_NOTES = Dict{Symbol,String}()
 const _ARTIFACT_INSTALL_STATUS = Dict{String,Bool}()
 const _ARTIFACT_INSTALL_ERRORS = Dict{String,String}()
+const _ARTIFACT_INSTALL_OUTPUT = Dict{String,String}()
+const _FALLBACK_INFO_EMITTED = Set{Symbol}()
 const _UPSTREAM_FILE_INFO = NamedTuple{(:relative_path, :url, :sha256),Tuple{String,String,Union{Nothing,String}}}
 const _VALID_MODEL_DISTRIBUTIONS = Set{Symbol}((
     :shipped,
@@ -785,28 +787,30 @@ function download_hf_files(
     headers = Pair{String,String}[]
     token !== nothing && push!(headers, "Authorization" => "Bearer $(token)")
 
-    outputs = String[]
-    for file in filenames
-        relative = String(file)
-        url = "https://huggingface.co/$(repo_id)/resolve/$(revision)/$(relative)"
-        local_path = joinpath(target_dir, splitpath(relative)...)
-        mkpath(dirname(local_path))
+    lock_key = Symbol("hf_" * _sanitize_cache_segment(String(repo_id)) * "_" * _sanitize_cache_segment(String(revision)))
+    return _with_model_lock(lock_key) do
+        outputs = String[]
+        for file in filenames
+            relative = String(file)
+            url = "https://huggingface.co/$(repo_id)/resolve/$(revision)/$(relative)"
+            local_path = joinpath(target_dir, splitpath(relative)...)
+            mkpath(dirname(local_path))
 
-        if !force && isfile(local_path)
+            if !force && isfile(local_path)
+                push!(outputs, local_path)
+                continue
+            end
+
+            try
+                _download_to_file_atomic(url, local_path; headers=headers)
+            catch err
+                throw(ArgumentError("Failed to download Hugging Face file $(repo_id)/$(relative)@$(revision): $(sprint(showerror, err))"))
+            end
+
             push!(outputs, local_path)
-            continue
         end
-
-        try
-            _download_with_retries(url, local_path; headers=headers)
-        catch err
-            throw(ArgumentError("Failed to download Hugging Face file $(repo_id)/$(relative)@$(revision): $(sprint(showerror, err))"))
-        end
-
-        push!(outputs, local_path)
+        return outputs
     end
-
-    return outputs
 end
 
 """
@@ -944,8 +948,8 @@ function prefetch_models_status(
         end
 
         artifact_info = entry.artifact_name === nothing ?
-            (ok=false, error=nothing, urls=String[]) :
-            get(artifact_status, entry.artifact_name, (ok=false, error=nothing, urls=String[]))
+            (ok=false, error=nothing, urls=String[], output=nothing) :
+            get(artifact_status, entry.artifact_name, (ok=false, error=nothing, urls=String[], output=nothing))
 
         fallback_info = (ok=false, error=nothing, path=nothing)
         if entry.distribution == :artifact_public
@@ -957,13 +961,18 @@ function prefetch_models_status(
         available = !isempty(files_after) && all(ispath, files_after)
         if available
             if fallback_info.ok
+                if artifact_info.error !== nothing && !(key in _FALLBACK_INFO_EMITTED)
+                    @info "Model $(key): artifact unavailable, used fallback download, cached at $(resolved_after)"
+                    push!(_FALLBACK_INFO_EMITTED, key)
+                end
                 if _asset_debug_enabled() && artifact_info.error !== nothing
                     @info(
-                        "Artifact install failed but fallback download succeeded",
+                        "Fallback details",
                         model=key,
                         artifact=entry.artifact_name,
                         artifact_urls=artifact_info.urls,
                         artifact_error=artifact_info.error,
+                        artifact_output=artifact_info.output,
                         path=resolved_after,
                     )
                 end
@@ -976,6 +985,8 @@ function prefetch_models_status(
 
         errors = String[]
         artifact_info.error !== nothing && push!(errors, "artifact: $(artifact_info.error)")
+        artifact_info.output !== nothing && !isempty(strip(String(artifact_info.output))) &&
+            push!(errors, "artifact_output: $(strip(String(artifact_info.output)))")
         fallback_info.error !== nothing && push!(errors, "fallback: $(fallback_info.error)")
         isempty(errors) && push!(errors, "model files are missing after prefetch attempts")
         msg = join(errors, " | ")
@@ -991,6 +1002,30 @@ function prefetch_models_status(
     end
 
     return statuses
+end
+
+"""
+Return prefetch status for a single model key.
+"""
+function asset_status(
+    key::Symbol;
+    force::Bool=false,
+)::NamedTuple
+    return prefetch_models_status([key]; force=force)[key]
+end
+
+"""
+Print a compact prefetch status line for one model key.
+"""
+function print_asset_status(
+    key::Symbol;
+    force::Bool=false,
+)::NamedTuple
+    status = asset_status(key; force=force)
+    path_label = status.path === nothing ? "<none>" : String(status.path)
+    println("$(key): available=$(status.available) method=$(status.method) path=$(path_label)")
+    status.error === nothing || println("error=$(status.error)")
+    return status
 end
 
 """
@@ -1331,29 +1366,39 @@ end
 function _ensure_artifact_installed(
     artifact_name::String;
     force::Bool=false,
-)::NamedTuple{(:ok, :error, :urls),Tuple{Bool,Union{Nothing,String},Vector{String}}}
+)::NamedTuple{(:ok, :error, :urls, :output),Tuple{Bool,Union{Nothing,String},Vector{String},Union{Nothing,String}}}
     urls = _artifact_download_urls(artifact_name)
-    isfile(_ARTIFACTS_TOML) || return (ok=false, error="Artifacts.toml not found at $(_ARTIFACTS_TOML)", urls=urls)
+    isfile(_ARTIFACTS_TOML) || return (ok=false, error="Artifacts.toml not found at $(_ARTIFACTS_TOML)", urls=urls, output=nothing)
 
     hash = Artifacts.artifact_hash(artifact_name, _ARTIFACTS_TOML)
-    hash === nothing && return (ok=false, error="Artifact '$artifact_name' is not bound in Artifacts.toml", urls=urls)
+    hash === nothing && return (ok=false, error="Artifact '$artifact_name' is not bound in Artifacts.toml", urls=urls, output=nothing)
 
     if !force && haskey(_ARTIFACT_INSTALL_STATUS, artifact_name) && !_ARTIFACT_INSTALL_STATUS[artifact_name]
         cached_error = get(_ARTIFACT_INSTALL_ERRORS, artifact_name, "cached artifact install failure")
-        return (ok=Artifacts.artifact_exists(hash), error=cached_error, urls=urls)
+        cached_output = get(_ARTIFACT_INSTALL_OUTPUT, artifact_name, nothing)
+        return (ok=Artifacts.artifact_exists(hash), error=cached_error, urls=urls, output=cached_output)
     end
 
     if !Artifacts.artifact_exists(hash) || force
+        captured = IOBuffer()
         try
-            Base.invokelatest(Artifacts.ensure_artifact_installed, artifact_name, _ARTIFACTS_TOML)
+            redirect_stdout(captured) do
+                redirect_stderr(captured) do
+                    Base.invokelatest(Artifacts.ensure_artifact_installed, artifact_name, _ARTIFACTS_TOML)
+                end
+            end
         catch err
             _ARTIFACT_INSTALL_STATUS[artifact_name] = false
             _ARTIFACT_INSTALL_ERRORS[artifact_name] = sprint(showerror, err)
+            output_text = String(take!(captured))
+            output_value = isempty(strip(output_text)) ? nothing : output_text
+            output_value === nothing || (_ARTIFACT_INSTALL_OUTPUT[artifact_name] = output_value)
             _asset_debug_enabled() && @info(
                 "Artifact installation failed",
                 artifact=artifact_name,
                 urls=urls,
                 error=_ARTIFACT_INSTALL_ERRORS[artifact_name],
+                output=output_value,
             )
         end
     end
@@ -1361,8 +1406,10 @@ function _ensure_artifact_installed(
     available = Artifacts.artifact_exists(hash)
     _ARTIFACT_INSTALL_STATUS[artifact_name] = available
     available && pop!(_ARTIFACT_INSTALL_ERRORS, artifact_name, nothing)
+    available && pop!(_ARTIFACT_INSTALL_OUTPUT, artifact_name, nothing)
     error = available ? nothing : get(_ARTIFACT_INSTALL_ERRORS, artifact_name, "artifact missing after installation attempt")
-    return (ok=available, error=error, urls=urls)
+    output = available ? nothing : get(_ARTIFACT_INSTALL_OUTPUT, artifact_name, nothing)
+    return (ok=available, error=error, urls=urls, output=output)
 end
 
 function _artifact_root(artifact_name::Union{Nothing,String})::Union{Nothing,String}
@@ -1438,6 +1485,100 @@ function _download_with_retries(
     throw(ArgumentError("Failed to download $(url) after $(retries) attempts: $(sprint(showerror, last_error))"))
 end
 
+function _download_temp_path(dest::AbstractString)::String
+    return string(
+        String(dest),
+        ".download.",
+        getpid(),
+        ".",
+        Threads.threadid(),
+        ".",
+        time_ns(),
+        ".",
+        rand(UInt32),
+    )
+end
+
+function _cleanup_download_temps(dest::AbstractString)::Nothing
+    directory = dirname(String(dest))
+    isdir(directory) || return nothing
+    prefix = basename(String(dest)) * ".download."
+    for path in readdir(directory; join=true)
+        startswith(basename(path), prefix) || continue
+        rm(path; force=true)
+    end
+    return nothing
+end
+
+function _download_to_file_atomic(
+    url::AbstractString,
+    dest::AbstractString;
+    headers::AbstractVector{<:Pair}=Pair{String,String}[],
+    expected_sha256::Union{Nothing,String}=nothing,
+    retries::Int=4,
+    initial_backoff::Float64=0.5,
+)::Nothing
+    target = String(dest)
+    mkpath(dirname(target))
+    tmp_path = _download_temp_path(target)
+    rm(tmp_path; force=true)
+
+    try
+        _download_with_retries(url, tmp_path; headers=headers, retries=retries, initial_backoff=initial_backoff)
+        if expected_sha256 !== nothing
+            actual_sha = lowercase(_sha256_hex(tmp_path))
+            actual_sha == lowercase(expected_sha256) || throw(ArgumentError(
+                "Checksum mismatch for $(url): expected $(expected_sha256), got $(actual_sha)",
+            ))
+        end
+        mv(tmp_path, target; force=true)
+    catch err
+        rm(tmp_path; force=true)
+        throw(err)
+    finally
+        _cleanup_download_temps(target)
+    end
+    return nothing
+end
+
+function _with_model_lock(
+    f::Function,
+    key::Symbol;
+    timeout_sec::Float64=120.0,
+    initial_backoff::Float64=0.05,
+)::Any
+    timeout_sec > 0 || throw(ArgumentError("timeout_sec must be > 0"))
+    initial_backoff > 0 || throw(ArgumentError("initial_backoff must be > 0"))
+
+    locks_dir = joinpath(_CACHE_ROOT, "locks")
+    mkpath(locks_dir)
+    lock_path = joinpath(locks_dir, _sanitize_cache_segment(String(key)) * ".lock")
+
+    deadline = time() + timeout_sec
+    backoff = initial_backoff
+    while true
+        try
+            mkdir(lock_path)
+            break
+        catch err
+            if !ispath(lock_path)
+                rethrow()
+            end
+            if time() >= deadline
+                throw(ArgumentError("Timed out waiting for model cache lock: $(lock_path)"))
+            end
+            sleep(backoff)
+            backoff = min(backoff * 1.5, 0.5)
+        end
+    end
+
+    try
+        return f()
+    finally
+        rm(lock_path; force=true)
+    end
+end
+
 function _public_cache_target_path(entry::BuiltinModelEntry, file_info::_UPSTREAM_FILE_INFO)::String
     target_dir = entry.fallback_path
     name = basename(file_info.relative_path)
@@ -1455,45 +1596,37 @@ function _ensure_public_model_cached!(
     target_dir = entry.fallback_path
     mkpath(target_dir)
 
-    for file_info in upstream
-        target_path = _public_cache_target_path(entry, file_info)
-        expected_sha = file_info.sha256
+    return _with_model_lock(key) do
+        for file_info in upstream
+            target_path = _public_cache_target_path(entry, file_info)
+            expected_sha = file_info.sha256
 
-        if isfile(target_path) && !force
-            if expected_sha === nothing
-                continue
+            if isfile(target_path) && !force
+                if expected_sha === nothing
+                    continue
+                end
+                lowercase(_sha256_hex(target_path)) == lowercase(expected_sha) && continue
             end
-            lowercase(_sha256_hex(target_path)) == lowercase(expected_sha) && continue
+
+            try
+                _download_to_file_atomic(file_info.url, target_path; expected_sha256=expected_sha)
+            catch err
+                msg = sprint(showerror, err)
+                _asset_debug_enabled() && @info(
+                    "Fallback file download failed",
+                    model=key,
+                    url=file_info.url,
+                    target=target_path,
+                    error=msg,
+                )
+                return (ok=false, error="Failed to cache $(file_info.url): $(msg)", path=nothing)
+            end
         end
 
-        tmp_path = target_path * ".download"
-        rm(tmp_path; force=true)
-        try
-            _download_with_retries(file_info.url, tmp_path)
-            if expected_sha !== nothing
-                actual_sha = lowercase(_sha256_hex(tmp_path))
-                actual_sha == lowercase(expected_sha) || throw(ArgumentError(
-                    "Checksum mismatch for $(file_info.url): expected $(expected_sha), got $(actual_sha)",
-                ))
-            end
-            mv(tmp_path, target_path; force=true)
-        catch err
-            rm(tmp_path; force=true)
-            msg = sprint(showerror, err)
-            _asset_debug_enabled() && @info(
-                "Fallback file download failed",
-                model=key,
-                url=file_info.url,
-                target=target_path,
-                error=msg,
-            )
-            return (ok=false, error="Failed to cache $(file_info.url): $(msg)", path=nothing)
+        files = _resolved_model_files(entry, target_dir)
+        if !isempty(files) && all(ispath, files)
+            return (ok=true, error=nothing, path=target_dir)
         end
+        return (ok=false, error="Downloaded files did not match expected tokenizer layout for $key", path=target_dir)
     end
-
-    files = _resolved_model_files(entry, target_dir)
-    if !isempty(files) && all(ispath, files)
-        return (ok=true, error=nothing, path=target_dir)
-    end
-    return (ok=false, error="Downloaded files did not match expected tokenizer layout for $key", path=target_dir)
 end

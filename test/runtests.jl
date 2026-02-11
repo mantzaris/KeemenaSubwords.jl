@@ -5,7 +5,7 @@ const FIXTURES_DIR = joinpath(@__DIR__, "fixtures")
 fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
 const _DOWNLOAD_TESTS = get(ENV, "KEEMENA_TEST_DOWNLOADS", get(ENV, "KEEMENA_RUN_NETWORK_TESTS", "0")) == "1"
 
-@testset "KeemenaSubwords sections 1-19" begin
+@testset "KeemenaSubwords sections 1-20" begin
     @testset "Model registry" begin
         names = available_models()
         @test :core_bpe_en in names
@@ -588,7 +588,7 @@ const _DOWNLOAD_TESTS = get(ENV, "KEEMENA_TEST_DOWNLOADS", get(ENV, "KEEMENA_RUN
         @test detect_tokenizer_format(mixed) == :bpe_gpt2
     end
 
-    @testset "Section 19 asset UX and sentencepiece fallback" begin
+    @testset "Section 20 asset UX, locking, and one-call APIs" begin
         status = prefetch_models_status([:core_bpe_en])
         @test haskey(status, :core_bpe_en)
         @test hasproperty(status[:core_bpe_en], :available)
@@ -600,6 +600,7 @@ const _DOWNLOAD_TESTS = get(ENV, "KEEMENA_TEST_DOWNLOADS", get(ENV, "KEEMENA_RUN
 
         compat = prefetch_models([:core_bpe_en])
         @test compat[:core_bpe_en] == status[:core_bpe_en].available
+        @test asset_status(:core_bpe_en).available == status[:core_bpe_en].available
 
         spiece_dir = mktempdir()
         cp(fixture("sentencepiece", "toy_bpe.model"), joinpath(spiece_dir, "spiece.model"))
@@ -616,6 +617,41 @@ const _DOWNLOAD_TESTS = get(ENV, "KEEMENA_TEST_DOWNLOADS", get(ENV, "KEEMENA_RUN
         @test basename(only(detected_custom.sentencepiece_models)) == "custom.model"
         @test detect_tokenizer_format(custom_model_dir) == :sentencepiece_model
         @test load_tokenizer(custom_model_dir) isa SentencePieceTokenizer
+
+        clear_tokenizer_cache!()
+        @test encode(:core_bpe_en, "hello world") == encode(load_tokenizer(:core_bpe_en), "hello world")
+        @test !isempty(tokenize(fixture("hf_json_wordpiece"), "Hello world"))
+        @test encode_result(fixture("hf_json_wordpiece"), "Hello world").ids == encode(
+            load_tokenizer(fixture("hf_json_wordpiece")),
+            "Hello world";
+            add_special_tokens=true,
+        )
+        @test decode(:core_wordpiece_en, encode(:core_wordpiece_en, "hello world"; add_special_tokens=true)) == "hello world"
+        @test !isempty(cached_tokenizers())
+        clear_tokenizer_cache!()
+        @test isempty(cached_tokenizers())
+
+        lock_key = Symbol("section20_lock_" * string(time_ns()))
+        t1_end = Ref(0.0)
+        t2_start = Ref(0.0)
+        t1 = Threads.@spawn KeemenaSubwords._with_model_lock(lock_key; timeout_sec=5.0) do
+            sleep(0.20)
+            t1_end[] = time()
+        end
+        sleep(0.02)
+        t2 = Threads.@spawn KeemenaSubwords._with_model_lock(lock_key; timeout_sec=5.0) do
+            t2_start[] = time()
+        end
+        fetch(t1)
+        fetch(t2)
+        @test t2_start[] >= t1_end[] - 1e-3
+
+        @test_throws ErrorException KeemenaSubwords._with_model_lock(lock_key; timeout_sec=5.0) do
+            error("lock release validation")
+        end
+        @test KeemenaSubwords._with_model_lock(lock_key; timeout_sec=5.0) do
+            true
+        end
 
         if _DOWNLOAD_TESTS
             smoke_keys = [
@@ -636,9 +672,17 @@ const _DOWNLOAD_TESTS = get(ENV, "KEEMENA_TEST_DOWNLOADS", get(ENV, "KEEMENA_RUN
                 tok = load_tokenizer(key)
                 ids = encode(tok, "Hello world")
                 @test !isempty(ids)
+                e2e = if tok isa TiktokenTokenizer
+                    encode_result(key, "Hello world"; add_special_tokens=false, return_masks=true)
+                else
+                    encode_result(key, "Hello world"; return_masks=true)
+                end
+                @test !isempty(e2e.ids)
+                @test e2e.attention_mask !== nothing
             end
         end
     end
 
+    include("e2e_user_workflows.jl")
     include("test_goldens.jl")
 end

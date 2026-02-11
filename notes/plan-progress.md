@@ -1335,3 +1335,101 @@ Implement section `## 19)` to harden built-in asset UX, fix SentencePiece fallba
 ### Notes
 - User-facing logs are now quiet for successful fallback recovery paths.
 - Maintainer diagnostics remain available via debug env var and CI download-smoke coverage.
+
+## 2026-02-10 - Iteration 20
+
+### Objective
+Implement section `## 20)` to harden end-user asset UX and concurrency behavior, add high-level E2E workflow tests, introduce one-call convenience APIs with caching, and document deferred goals in `futurework.md`.
+
+### Completed section-20 implementation
+
+#### A) Informative artifact-vs-fallback decisions (quiet by default)
+- Added new status API in `src/models.jl`:
+  - `prefetch_models_status(keys; force=false)` returns per-key:
+    - `available::Bool`
+    - `method::Symbol` (`:artifact`, `:fallback_download`, `:already_present`, `:failed`)
+    - `path::Union{Nothing,String}`
+    - `error::Union{Nothing,String}`
+- Kept `prefetch_models` backward-compatible:
+  - still returns `Dict{Symbol,Bool}` via the new status API.
+- Added convenience query helpers:
+  - `asset_status(key; force=false)`
+  - `print_asset_status(key; force=false)`
+- Added one-time per-session fallback info messaging:
+  - if artifact fails and fallback succeeds, emit concise info once per key:
+    - "Model <key>: artifact unavailable, used fallback download, cached at <path>"
+- Added debug-mode diagnostics (`KEEMENA_SUBWORDS_ASSET_DEBUG=1`):
+  - artifact URLs
+  - artifact error
+  - captured artifact installer output
+  - fallback download details
+- Captured artifact installer stdout/stderr in `_ensure_artifact_installed`:
+  - suppressed when fallback succeeds
+  - included in failure summaries when both artifact and fallback fail.
+
+#### B) Concurrency-safe fallback/cache downloads
+- Added per-model lock helper in `src/models.jl`:
+  - `_with_model_lock(key) do ... end`
+  - lock file under `<cache>/locks/<key>.lock`
+  - timeout + polling backoff
+  - `finally` cleanup release
+- Added atomic download commit helper:
+  - `_download_to_file_atomic(url, dest; expected_sha256=...)`
+  - unique temp filename (`.download.<pid>.<thread>.<time>.<rand>`)
+  - checksum validation on temp file
+  - atomic rename into destination
+  - stale temp cleanup
+- Added retry helper with exponential backoff:
+  - `_download_with_retries(url, dest; retries=4, initial_backoff=0.5)`
+- Wired hardening into:
+  - fallback public model cache install (`_ensure_public_model_cached!`)
+  - `download_hf_files(...)` (wrapped with lock + atomic writes)
+
+#### C) E2E user workflow tests
+- Added new file `test/e2e_user_workflows.jl` and included it from `test/runtests.jl`.
+- Added readable high-level workflows:
+  - HF tokenizer.json directory autodetect end-to-end
+  - register local model then load by symbolic key
+  - WordPiece vocab.txt path loading end-to-end
+  - SentencePiece discovery via `spiece.model` and single `custom.model` heuristic
+  - gated network E2E workflow set when `KEEMENA_TEST_DOWNLOADS=1` for representative public keys
+- Updated top-level test label to `KeemenaSubwords sections 1-20`.
+
+#### D) One-call convenience APIs + session tokenizer cache
+- Added one-call overloads in `src/io.jl` for key/path usage without explicit `load_tokenizer`:
+  - `tokenize(key_or_path, text; format=nothing, prefetch=true)`
+  - `encode(key_or_path, text; format=nothing, prefetch=true, kwargs...)`
+  - `encode_result(key_or_path, text; format=nothing, prefetch=true, kwargs...)`
+  - `decode(key_or_path, ids; format=nothing, prefetch=true)`
+- Added in-session tokenizer cache with lock protection:
+  - `get_tokenizer_cached(...)`
+  - `clear_tokenizer_cache!()`
+  - `cached_tokenizers()`
+- Exported new APIs in `src/KeemenaSubwords.jl`:
+  - `prefetch_models_status`, `asset_status`, `print_asset_status`
+  - `get_tokenizer_cached`, `clear_tokenizer_cache!`, `cached_tokenizers`
+
+#### E) Deferred roadmap file
+- Added root file `futurework.md` with deferred sections:
+  - distribution/reproducibility (including gated checksum persistence)
+  - training roadmap
+  - HF tokenizer.json parity expansion
+  - offsets/structured outputs
+  - performance roadmap
+  - expanded conformance goldens
+
+### Verification
+- Ran: `julia --project=. -e 'using Pkg; Pkg.test()'`
+  - Result: `366/366` tests passed (`KeemenaSubwords sections 1-20`) in default lane.
+- Ran: `KEEMENA_TEST_DOWNLOADS=1 julia --project=. -e 'using Pkg; Pkg.test()'`
+  - Result: `438/438` tests passed (`KeemenaSubwords sections 1-20`) in download-enabled lane.
+- Ran: `julia --project=. tools/check_docs_examples.jl`
+  - Result: passed.
+- Ran: `julia --project=docs docs/make.jl`
+  - Result: docs build/doctests passed.
+- Ran: `julia --project=. tools/sync_readme_models.jl --check`
+  - Result: README/docs model inventory blocks are in sync.
+
+### Notes
+- Normal users now see concise success messages for fallback recovery instead of noisy artifact failure output.
+- Maintainers still have full diagnostics available through status APIs and debug env logging.
