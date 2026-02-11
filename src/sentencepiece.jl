@@ -82,10 +82,18 @@ function _resolve_sentencepiece_model_path(path::AbstractString)::String
             candidate = joinpath(path, filename)
             isfile(candidate) && push!(candidates, candidate)
         end
+        if isempty(candidates)
+            any_model = sort(filter(model_path -> begin
+                lower = lowercase(model_path)
+                endswith(lower, ".model") || endswith(lower, ".model.v3")
+            end, readdir(path; join=true)))
+            length(any_model) == 1 && return only(any_model)
+        end
 
         isempty(candidates) && throw(ArgumentError(
             "No supported SentencePiece model file found in directory: $path. " *
-            "Expected one of spm.model, spiece.model, tokenizer.model, tokenizer.model.v3, sentencepiece.bpe.model. " *
+            "Expected one of spm.model, spiece.model, tokenizer.model, tokenizer.model.v3, sentencepiece.bpe.model " *
+            "or exactly one *.model/*.model.v3 file in the directory. " *
             "Example: load_sentencepiece(\"/path/to/tokenizer.model\")",
         ))
         return candidates[1]

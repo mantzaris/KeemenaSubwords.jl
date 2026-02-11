@@ -15,6 +15,7 @@ const _PERSISTED_LOCAL_KEYS = Set{Symbol}()
 const _LOCAL_MODEL_RESOLVED_FILES = Dict{Symbol,Vector{String}}()
 const _LOCAL_MODEL_NOTES = Dict{Symbol,String}()
 const _ARTIFACT_INSTALL_STATUS = Dict{String,Bool}()
+const _ARTIFACT_INSTALL_ERRORS = Dict{String,String}()
 const _UPSTREAM_FILE_INFO = NamedTuple{(:relative_path, :url, :sha256),Tuple{String,String,Union{Nothing,String}}}
 const _VALID_MODEL_DISTRIBUTIONS = Set{Symbol}((
     :shipped,
@@ -66,6 +67,8 @@ _entry(
 )
 
 _public_model_cache_dir(key::Symbol)::String = joinpath(_CACHE_ROOT, "public", String(key))
+
+_asset_debug_enabled() = get(ENV, "KEEMENA_SUBWORDS_ASSET_DEBUG", "0") == "1"
 
 const _MODEL_REGISTRY = Dict{Symbol,BuiltinModelEntry}(
     :core_bpe_en => _entry(
@@ -795,7 +798,7 @@ function download_hf_files(
         end
 
         try
-            Downloads.download(url, local_path; headers=headers)
+            _download_with_retries(url, local_path; headers=headers)
         catch err
             throw(ArgumentError("Failed to download Hugging Face file $(repo_id)/$(relative)@$(revision): $(sprint(showerror, err))"))
         end
@@ -899,9 +902,26 @@ function prefetch_models(
     keys::AbstractVector{Symbol}=available_models(shipped=true);
     force::Bool=false,
 )::Dict{Symbol,Bool}
+    status = prefetch_models_status(keys; force=force)
+    return Dict(key => result.available for (key, result) in status)
+end
+
+"""
+Return detailed prefetch status for built-in model keys.
+
+Each value includes:
+- `available::Bool`
+- `method::Symbol` (`:artifact`, `:fallback_download`, `:already_present`, or `:failed`)
+- `path::Union{Nothing,String}`
+- `error::Union{Nothing,String}`
+"""
+function prefetch_models_status(
+    keys::AbstractVector{Symbol}=available_models(shipped=true);
+    force::Bool=false,
+)::Dict{Symbol,NamedTuple}
     _ensure_local_models_loaded()
-    availability = Dict{Symbol,Bool}()
-    artifact_status = Dict{String,Bool}()
+    statuses = Dict{Symbol,NamedTuple}()
+    artifact_status = Dict{String,NamedTuple}()
 
     for key in keys
         haskey(_MODEL_REGISTRY, key) || throw(ArgumentError("Unknown built-in model: $key"))
@@ -914,17 +934,63 @@ function prefetch_models(
 
     for key in keys
         entry = _MODEL_REGISTRY[key]
-        artifact_ok = entry.artifact_name === nothing ? false : get(artifact_status, entry.artifact_name, false)
-        if !artifact_ok && entry.distribution == :artifact_public
-            _ensure_public_model_cached!(key, entry; force=force)
-        end
-
         resolved = _resolve_model_path(entry)
         files = _resolved_model_files(entry, resolved)
-        availability[key] = !isempty(files) && all(ispath, files)
+        if !isempty(files) && all(ispath, files)
+            source = _resolve_model_source(entry, resolved)
+            method = source == :artifact ? :artifact : :already_present
+            statuses[key] = (available=true, method=method, path=resolved, error=nothing)
+            continue
+        end
+
+        artifact_info = entry.artifact_name === nothing ?
+            (ok=false, error=nothing, urls=String[]) :
+            get(artifact_status, entry.artifact_name, (ok=false, error=nothing, urls=String[]))
+
+        fallback_info = (ok=false, error=nothing, path=nothing)
+        if entry.distribution == :artifact_public
+            fallback_info = _ensure_public_model_cached!(key, entry; force=force)
+        end
+
+        resolved_after = _resolve_model_path(entry)
+        files_after = _resolved_model_files(entry, resolved_after)
+        available = !isempty(files_after) && all(ispath, files_after)
+        if available
+            if fallback_info.ok
+                if _asset_debug_enabled() && artifact_info.error !== nothing
+                    @info(
+                        "Artifact install failed but fallback download succeeded",
+                        model=key,
+                        artifact=entry.artifact_name,
+                        artifact_urls=artifact_info.urls,
+                        artifact_error=artifact_info.error,
+                        path=resolved_after,
+                    )
+                end
+                statuses[key] = (available=true, method=:fallback_download, path=resolved_after, error=nothing)
+            else
+                statuses[key] = (available=true, method=:already_present, path=resolved_after, error=nothing)
+            end
+            continue
+        end
+
+        errors = String[]
+        artifact_info.error !== nothing && push!(errors, "artifact: $(artifact_info.error)")
+        fallback_info.error !== nothing && push!(errors, "fallback: $(fallback_info.error)")
+        isempty(errors) && push!(errors, "model files are missing after prefetch attempts")
+        msg = join(errors, " | ")
+
+        @warn(
+            "Model prefetch failed",
+            model=key,
+            path=resolved_after,
+            error=msg,
+            artifact_urls=artifact_info.urls,
+        )
+        statuses[key] = (available=false, method=:failed, path=nothing, error=msg)
     end
 
-    return availability
+    return statuses
 end
 
 """
@@ -1049,6 +1115,7 @@ end
 function _sentencepiece_candidates(dir::String)::Vector{String}
     names = (
         "spm.model",
+        "spiece.model",
         "tokenizer.model",
         "tokenizer.model.v3",
         "sentencepiece.bpe.model",
@@ -1057,6 +1124,13 @@ function _sentencepiece_candidates(dir::String)::Vector{String}
     for name in names
         candidate = joinpath(dir, name)
         isfile(candidate) && push!(found, candidate)
+    end
+    if isempty(found) && !isfile(joinpath(dir, "tokenizer.json"))
+        any_model = sort(filter(path -> begin
+            lower = lowercase(path)
+            endswith(lower, ".model") || endswith(lower, ".model.v3")
+        end, readdir(dir; join=true)))
+        length(any_model) == 1 && return String[only(any_model)]
     end
     return found
 end
@@ -1254,14 +1328,19 @@ function _sanitize_cache_segment(value::AbstractString)::String
     return isempty(result) ? "_" : result
 end
 
-function _ensure_artifact_installed(artifact_name::String; force::Bool=false)::Bool
-    isfile(_ARTIFACTS_TOML) || return false
+function _ensure_artifact_installed(
+    artifact_name::String;
+    force::Bool=false,
+)::NamedTuple{(:ok, :error, :urls),Tuple{Bool,Union{Nothing,String},Vector{String}}}
+    urls = _artifact_download_urls(artifact_name)
+    isfile(_ARTIFACTS_TOML) || return (ok=false, error="Artifacts.toml not found at $(_ARTIFACTS_TOML)", urls=urls)
 
     hash = Artifacts.artifact_hash(artifact_name, _ARTIFACTS_TOML)
-    hash === nothing && return false
+    hash === nothing && return (ok=false, error="Artifact '$artifact_name' is not bound in Artifacts.toml", urls=urls)
 
     if !force && haskey(_ARTIFACT_INSTALL_STATUS, artifact_name) && !_ARTIFACT_INSTALL_STATUS[artifact_name]
-        return Artifacts.artifact_exists(hash)
+        cached_error = get(_ARTIFACT_INSTALL_ERRORS, artifact_name, "cached artifact install failure")
+        return (ok=Artifacts.artifact_exists(hash), error=cached_error, urls=urls)
     end
 
     if !Artifacts.artifact_exists(hash) || force
@@ -1269,18 +1348,21 @@ function _ensure_artifact_installed(artifact_name::String; force::Bool=false)::B
             Base.invokelatest(Artifacts.ensure_artifact_installed, artifact_name, _ARTIFACTS_TOML)
         catch err
             _ARTIFACT_INSTALL_STATUS[artifact_name] = false
-            @warn(
-                "Failed to install artifact",
+            _ARTIFACT_INSTALL_ERRORS[artifact_name] = sprint(showerror, err)
+            _asset_debug_enabled() && @info(
+                "Artifact installation failed",
                 artifact=artifact_name,
-                urls=_artifact_download_urls(artifact_name),
-                error=sprint(showerror, err),
+                urls=urls,
+                error=_ARTIFACT_INSTALL_ERRORS[artifact_name],
             )
         end
     end
 
     available = Artifacts.artifact_exists(hash)
     _ARTIFACT_INSTALL_STATUS[artifact_name] = available
-    return available
+    available && pop!(_ARTIFACT_INSTALL_ERRORS, artifact_name, nothing)
+    error = available ? nothing : get(_ARTIFACT_INSTALL_ERRORS, artifact_name, "artifact missing after installation attempt")
+    return (ok=available, error=error, urls=urls)
 end
 
 function _artifact_root(artifact_name::Union{Nothing,String})::Union{Nothing,String}
@@ -1324,6 +1406,38 @@ function _sha256_hex(path::AbstractString)::String
     end
 end
 
+function _download_with_retries(
+    url::AbstractString,
+    dest::AbstractString;
+    headers::AbstractVector{<:Pair}=Pair{String,String}[],
+    retries::Int=4,
+    initial_backoff::Float64=0.5,
+)::Nothing
+    retries >= 1 || throw(ArgumentError("retries must be >= 1"))
+    last_error::Union{Nothing,Exception} = nothing
+    for attempt in 1:retries
+        try
+            rm(String(dest); force=true)
+            Downloads.download(String(url), String(dest); headers=headers)
+            _asset_debug_enabled() && @info("Download succeeded", url=String(url), dest=String(dest), attempt=attempt)
+            return nothing
+        catch err
+            last_error = err
+            _asset_debug_enabled() && @info(
+                "Download attempt failed",
+                url=String(url),
+                dest=String(dest),
+                attempt=attempt,
+                retries=retries,
+                error=sprint(showerror, err),
+            )
+            attempt == retries && break
+            sleep(initial_backoff * (2.0 ^ (attempt - 1)))
+        end
+    end
+    throw(ArgumentError("Failed to download $(url) after $(retries) attempts: $(sprint(showerror, last_error))"))
+end
+
 function _public_cache_target_path(entry::BuiltinModelEntry, file_info::_UPSTREAM_FILE_INFO)::String
     target_dir = entry.fallback_path
     name = basename(file_info.relative_path)
@@ -1334,9 +1448,9 @@ function _ensure_public_model_cached!(
     key::Symbol,
     entry::BuiltinModelEntry;
     force::Bool=false,
-)::Bool
+)::NamedTuple{(:ok, :error, :path),Tuple{Bool,Union{Nothing,String},Union{Nothing,String}}}
     upstream = get(_MODEL_UPSTREAM_FILES, key, Vector{_UPSTREAM_FILE_INFO}())
-    isempty(upstream) && return false
+    isempty(upstream) && return (ok=false, error="No upstream file metadata for $key", path=nothing)
 
     target_dir = entry.fallback_path
     mkpath(target_dir)
@@ -1355,7 +1469,7 @@ function _ensure_public_model_cached!(
         tmp_path = target_path * ".download"
         rm(tmp_path; force=true)
         try
-            Downloads.download(file_info.url, tmp_path)
+            _download_with_retries(file_info.url, tmp_path)
             if expected_sha !== nothing
                 actual_sha = lowercase(_sha256_hex(tmp_path))
                 actual_sha == lowercase(expected_sha) || throw(ArgumentError(
@@ -1365,17 +1479,21 @@ function _ensure_public_model_cached!(
             mv(tmp_path, target_path; force=true)
         catch err
             rm(tmp_path; force=true)
-            @warn(
-                "Failed to cache public model file",
+            msg = sprint(showerror, err)
+            _asset_debug_enabled() && @info(
+                "Fallback file download failed",
                 model=key,
                 url=file_info.url,
                 target=target_path,
-                error=sprint(showerror, err),
+                error=msg,
             )
-            return false
+            return (ok=false, error="Failed to cache $(file_info.url): $(msg)", path=nothing)
         end
     end
 
     files = _resolved_model_files(entry, target_dir)
-    return !isempty(files) && all(ispath, files)
+    if !isempty(files) && all(ispath, files)
+        return (ok=true, error=nothing, path=target_dir)
+    end
+    return (ok=false, error="Downloaded files did not match expected tokenizer layout for $key", path=target_dir)
 end

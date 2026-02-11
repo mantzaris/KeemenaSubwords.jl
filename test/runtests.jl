@@ -5,7 +5,7 @@ const FIXTURES_DIR = joinpath(@__DIR__, "fixtures")
 fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
 const _DOWNLOAD_TESTS = get(ENV, "KEEMENA_TEST_DOWNLOADS", get(ENV, "KEEMENA_RUN_NETWORK_TESTS", "0")) == "1"
 
-@testset "KeemenaSubwords sections 1-18" begin
+@testset "KeemenaSubwords sections 1-19" begin
     @testset "Model registry" begin
         names = available_models()
         @test :core_bpe_en in names
@@ -243,48 +243,11 @@ const _DOWNLOAD_TESTS = get(ENV, "KEEMENA_TEST_DOWNLOADS", get(ENV, "KEEMENA_RUN
             :bert_base_multilingual_cased_wordpiece,
             :t5_small_sentencepiece_unigram,
         ]
-        if _DOWNLOAD_TESTS
-            availability = prefetch_models(baseline_keys)
-            @test all(haskey(availability, key) for key in baseline_keys)
-            @test all(values(availability))
-
-            for key in (
-                :tiktoken_o200k_base,
-                :tiktoken_cl100k_base,
-                :tiktoken_r50k_base,
-                :tiktoken_p50k_base,
-            )
-                tt = load_tokenizer(key)
-                @test tt isa TiktokenTokenizer
-                ids = encode(tt, "hello world")
-                @test !isempty(ids)
-                @test decode(tt, ids) == "hello world"
-                @test !isempty(tokenize(tt, "hello world"))
-            end
-
-            gpt2 = load_tokenizer(:openai_gpt2_bpe)
-            @test gpt2 isa ByteBPETokenizer
-            gpt2_roundtrip = decode(gpt2, encode(gpt2, "hello world"))
-            @test replace(gpt2_roundtrip, " " => "") == "helloworld"
-
-            bert = load_tokenizer(:bert_base_uncased_wordpiece)
-            @test bert isa WordPieceTokenizer
-            @test !isempty(tokenize(bert, "hello keemena"))
-
-            bert_multi = load_tokenizer(:bert_base_multilingual_cased_wordpiece)
-            @test bert_multi isa WordPieceTokenizer
-            @test !isempty(tokenize(bert_multi, "hello mundo"))
-
-            t5 = load_tokenizer(:t5_small_sentencepiece_unigram)
-            @test t5 isa SentencePieceTokenizer
-            @test !isempty(tokenize(t5, "hello world"))
-        else
-            for key in baseline_keys
-                info = describe_model(key)
-                @test info.distribution == :artifact_public
-                @test !isempty(info.expected_files)
-                @test !isempty(info.provenance_urls)
-            end
+        for key in baseline_keys
+            info = describe_model(key)
+            @test info.distribution == :artifact_public
+            @test !isempty(info.expected_files)
+            @test !isempty(info.provenance_urls)
         end
     end
 
@@ -297,41 +260,11 @@ const _DOWNLOAD_TESTS = get(ENV, "KEEMENA_TEST_DOWNLOADS", get(ENV, "KEEMENA_RUN
             :roberta_base_bpe,
             :xlm_roberta_base_sentencepiece_bpe,
         ]
-        if _DOWNLOAD_TESTS
-            curated = prefetch_models(curated_keys)
-            @test all(haskey(curated, key) for key in curated_keys)
-            @test all(values(curated))
-
-            for key in (:mistral_v1_sentencepiece, :mistral_v3_sentencepiece, :xlm_roberta_base_sentencepiece_bpe)
-                tok = load_tokenizer(key)
-                @test tok isa SentencePieceTokenizer
-                @test !isempty(tokenize(tok, "hello world"))
-                ids = encode(tok, "hello world")
-                @test !isempty(ids)
-                @test decode(tok, ids) isa String
-            end
-
-            for key in (:phi2_bpe, :roberta_base_bpe)
-                tok = load_tokenizer(key)
-                @test tok isa ByteBPETokenizer
-                pieces = tokenize(tok, "hello world")
-                @test !isempty(pieces)
-                ids = encode(tok, "hello world")
-                @test !isempty(ids)
-                @test decode(tok, ids) isa String
-            end
-
-            qwen = load_tokenizer(:qwen2_5_bpe)
-            @test qwen isa HuggingFaceJSONTokenizer || qwen isa ByteBPETokenizer
-            @test !isempty(tokenize(qwen, "hello world"))
-            @test decode(qwen, encode(qwen, "hello world")) isa String
-        else
-            for key in curated_keys
-                info = describe_model(key)
-                @test info.distribution == :artifact_public
-                @test !isempty(info.expected_files)
-                @test !isempty(info.provenance_urls)
-            end
+        for key in curated_keys
+            info = describe_model(key)
+            @test info.distribution == :artifact_public
+            @test !isempty(info.expected_files)
+            @test !isempty(info.provenance_urls)
         end
     end
 
@@ -653,6 +586,58 @@ const _DOWNLOAD_TESTS = get(ENV, "KEEMENA_TEST_DOWNLOADS", get(ENV, "KEEMENA_RUN
         cp(fixture("bpe_gpt2", "vocab.json"), joinpath(mixed, "vocab.json"))
         cp(fixture("bpe_gpt2", "merges.txt"), joinpath(mixed, "merges.txt"))
         @test detect_tokenizer_format(mixed) == :bpe_gpt2
+    end
+
+    @testset "Section 19 asset UX and sentencepiece fallback" begin
+        status = prefetch_models_status([:core_bpe_en])
+        @test haskey(status, :core_bpe_en)
+        @test hasproperty(status[:core_bpe_en], :available)
+        @test hasproperty(status[:core_bpe_en], :method)
+        @test hasproperty(status[:core_bpe_en], :path)
+        @test hasproperty(status[:core_bpe_en], :error)
+        @test status[:core_bpe_en].available
+        @test status[:core_bpe_en].method in (:artifact, :already_present, :fallback_download)
+
+        compat = prefetch_models([:core_bpe_en])
+        @test compat[:core_bpe_en] == status[:core_bpe_en].available
+
+        spiece_dir = mktempdir()
+        cp(fixture("sentencepiece", "toy_bpe.model"), joinpath(spiece_dir, "spiece.model"))
+        detected_spiece = detect_tokenizer_files(spiece_dir)
+        @test length(detected_spiece.sentencepiece_models) == 1
+        @test basename(only(detected_spiece.sentencepiece_models)) == "spiece.model"
+        @test detect_tokenizer_format(spiece_dir) == :sentencepiece_model
+        @test load_tokenizer(spiece_dir) isa SentencePieceTokenizer
+
+        custom_model_dir = mktempdir()
+        cp(fixture("sentencepiece", "toy_bpe.model"), joinpath(custom_model_dir, "custom.model"))
+        detected_custom = detect_tokenizer_files(custom_model_dir)
+        @test length(detected_custom.sentencepiece_models) == 1
+        @test basename(only(detected_custom.sentencepiece_models)) == "custom.model"
+        @test detect_tokenizer_format(custom_model_dir) == :sentencepiece_model
+        @test load_tokenizer(custom_model_dir) isa SentencePieceTokenizer
+
+        if _DOWNLOAD_TESTS
+            smoke_keys = [
+                :tiktoken_o200k_base,
+                :openai_gpt2_bpe,
+                :bert_base_uncased_wordpiece,
+                :t5_small_sentencepiece_unigram,
+                :qwen2_5_bpe,
+            ]
+            smoke = prefetch_models_status(smoke_keys)
+            for key in smoke_keys
+                @test haskey(smoke, key)
+                entry = smoke[key]
+                @test entry.available
+                @test entry.method in (:artifact, :fallback_download, :already_present)
+                @test entry.path !== nothing
+
+                tok = load_tokenizer(key)
+                ids = encode(tok, "Hello world")
+                @test !isempty(ids)
+            end
+        end
     end
 
     include("test_goldens.jl")

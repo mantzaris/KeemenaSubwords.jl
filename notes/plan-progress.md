@@ -1253,3 +1253,85 @@ Implement section `## 18)` to stabilize CI around artifact-backed models, fix re
 ### Notes
 - Section 18 now enforces a stable offline/CI baseline while still supporting explicit download integration testing.
 - Artifact diagnostics are now actionable if a future hosting/checksum issue appears in CI.
+
+## 2026-02-10 - Iteration 19
+
+### Objective
+Implement section `## 19)` to harden built-in asset UX, fix SentencePiece fallback discovery gaps, and add CI download verification that exercises real model fetch/load behavior.
+
+### Completed section-19 implementation
+
+#### A) Quiet artifact failures when fallback succeeds + richer prefetch status
+- Added `prefetch_models_status(keys; force=false)` in `src/models.jl`:
+  - returns `Dict{Symbol,NamedTuple}` with:
+    - `available::Bool`
+    - `method::Symbol` (`:artifact`, `:fallback_download`, `:already_present`, `:failed`)
+    - `path::Union{Nothing,String}`
+    - `error::Union{Nothing,String}`
+- Kept `prefetch_models` backward-compatible:
+  - now delegates to `prefetch_models_status` and returns `Dict{Symbol,Bool}`.
+- Changed prefetch flow:
+  - artifact install is attempted first,
+  - if artifact fails, fallback file downloads are attempted,
+  - warning is emitted only if neither artifact nor fallback yields usable files.
+- Added maintainer debug mode:
+  - `KEEMENA_SUBWORDS_ASSET_DEBUG=1`
+  - logs artifact failure details, URLs, download attempts, and fallback outcomes.
+
+#### B) SentencePiece fallback discovery fix (`spiece.model` + single `*.model` heuristic)
+- Extended SentencePiece candidate discovery used by model resolution:
+  - added `spiece.model` to `src/models.jl::_sentencepiece_candidates`.
+- Added safe directory heuristic in both model discovery paths:
+  - if no canonical filename is found,
+  - and no `tokenizer.json` is present,
+  - and directory contains exactly one `*.model`/`*.model.v3`, treat as SentencePiece.
+- Applied this consistently in:
+  - `src/models.jl::_sentencepiece_candidates`
+  - `src/io.jl::detect_tokenizer_files`
+  - `src/sentencepiece.jl::_resolve_sentencepiece_model_path`
+
+#### C) Retry/backoff download helper wired into fallback and HF download paths
+- Added `_download_with_retries(url, dest; retries=4, initial_backoff=0.5)` in `src/models.jl`:
+  - exponential backoff,
+  - URL-aware error message with last exception,
+  - optional debug logs when `KEEMENA_SUBWORDS_ASSET_DEBUG=1`.
+- Integrated helper into:
+  - fallback public asset downloads (`_ensure_public_model_cached!`)
+  - `download_hf_files(...)` for installable/local workflows.
+
+#### D) Tests for section 19 contracts and smoke behavior
+- Updated top-level testset label to `KeemenaSubwords sections 1-19`.
+- Refined section-9 tests to be registry-shape checks only (offline deterministic).
+- Added new `Section 19 asset UX and sentencepiece fallback` testset in `test/runtests.jl`:
+  - validates `prefetch_models_status` shape and compatibility with `prefetch_models`,
+  - regression test for `spiece.model` detection/loading,
+  - regression test for directory with exactly one `custom.model`,
+  - download smoke (gated by `KEEMENA_TEST_DOWNLOADS=1`) for minimal representative keys:
+    - `:tiktoken_o200k_base`
+    - `:openai_gpt2_bpe`
+    - `:bert_base_uncased_wordpiece`
+    - `:t5_small_sentencepiece_unigram`
+    - `:qwen2_5_bpe`
+
+#### E) CI download-smoke workflow
+- Updated `.github/workflows/CI.yml`:
+  - added scheduled trigger (nightly) for proactive upstream/download drift checks,
+  - added dedicated `download-smoke` job (non-PR events) with `KEEMENA_TEST_DOWNLOADS=1`,
+  - added cache for `~/.julia/keemena_subwords` alongside existing Julia cache,
+  - keeps default PR test job deterministic and fast.
+
+### Verification
+- Ran: `julia --project=. -e 'using Pkg; Pkg.test()'`
+  - Result: `339/339` tests passed (`KeemenaSubwords sections 1-19`) in default/offline mode.
+- Ran: `KEEMENA_TEST_DOWNLOADS=1 julia --project=. -e 'using Pkg; Pkg.test()'`
+  - Result: `366/366` tests passed (`KeemenaSubwords sections 1-19`) with download smoke enabled.
+- Ran: `julia --project=. tools/check_docs_examples.jl`
+  - Result: passed.
+- Ran: `julia --project=docs docs/make.jl`
+  - Result: docs build/doctests passed.
+- Ran: `julia --project=. tools/sync_readme_models.jl --check`
+  - Result: README/docs inventory blocks still in sync.
+
+### Notes
+- User-facing logs are now quiet for successful fallback recovery paths.
+- Maintainer diagnostics remain available via debug env var and CI download-smoke coverage.

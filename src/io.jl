@@ -560,18 +560,26 @@ Example:
 function detect_tokenizer_files(dir::AbstractString)::NamedTuple
     root = normpath(String(dir))
     isdir(root) || throw(ArgumentError("Tokenizer directory does not exist: $root"))
+    tokenizer_json = isfile(joinpath(root, "tokenizer.json")) ? joinpath(root, "tokenizer.json") : nothing
 
     sentencepiece_candidates = String[]
     for filename in ("spm.model", "spiece.model", "tokenizer.model", "tokenizer.model.v3", "sentencepiece.bpe.model")
         path = joinpath(root, filename)
         isfile(path) && push!(sentencepiece_candidates, path)
     end
+    if isempty(sentencepiece_candidates) && tokenizer_json === nothing
+        any_model = sort(filter(path -> begin
+            lower = lowercase(path)
+            endswith(lower, ".model") || endswith(lower, ".model.v3")
+        end, readdir(root; join=true)))
+        length(any_model) == 1 && push!(sentencepiece_candidates, only(any_model))
+    end
 
     tiktoken_files = filter(p -> endswith(lowercase(p), ".tiktoken"), readdir(root; join=true))
 
     return (
         dir = root,
-        tokenizer_json = isfile(joinpath(root, "tokenizer.json")) ? joinpath(root, "tokenizer.json") : nothing,
+        tokenizer_json = tokenizer_json,
         vocab_json = isfile(joinpath(root, "vocab.json")) ? joinpath(root, "vocab.json") : nothing,
         merges_txt = isfile(joinpath(root, "merges.txt")) ? joinpath(root, "merges.txt") : nothing,
         encoder_json = isfile(joinpath(root, "encoder.json")) ? joinpath(root, "encoder.json") : nothing,
