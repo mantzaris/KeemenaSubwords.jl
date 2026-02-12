@@ -74,9 +74,16 @@ end
 Structured tokenization output for downstream pipelines.
 
 Offset contract:
-- `offsets` use UTF-8 codeunit indices with half-open spans `[start, stop)`.
-- special tokens are represented with sentinel offset `(0, 0)` and
+- coordinate unit: UTF-8 codeunits.
+- index base: 1.
+- span style: half-open `[start, stop)`.
+- valid bounds for spanful tokens: `1 <= start <= stop <= ncodeunits(text) + 1`.
+- sentinel for tokens without source-text spans: `(0, 0)`.
+- inserted post-processor specials use sentinel offsets.
+- present-in-text special added tokens keep real spans, and may still have
   `special_tokens_mask[i] == 1`.
+- `special_tokens_mask` marks special-token identity; `offsets` determine span
+  participation.
 """
 struct TokenizationResult
     ids::Vector{Int}
@@ -136,9 +143,14 @@ Encode text and return a structured `TokenizationResult`.
 
 Key keyword arguments:
 - `assume_normalized::Bool=false`: when `true`, tokenizer intrinsic normalization
-  is skipped and offsets are computed against the provided `text`.
+  is skipped and offsets are computed against the exact provided `text`.
 - `return_offsets::Bool=false`: include token-level offsets when available.
 - `return_masks::Bool=false`: include attention/token-type/special-token masks.
+
+Offset note:
+- Offsets use the package-wide 1-based UTF-8 codeunit half-open convention.
+- `assume_normalized` changes whether intrinsic normalization runs; it does not
+  change the offset coordinate system.
 """
 function encode_result end
 

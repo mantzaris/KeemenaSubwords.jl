@@ -17,3 +17,9 @@ subword_corpus = get_corpus(bundle, lvl)
 ```
 
 For the normalization/offsets alignment contract (`clean_text -> tokenization_text -> encode_result(...; assume_normalized=true)`), see [Normalization and Offsets Contract](normalization_offsets_contract.md).
+
+Alignment rule:
+Use `tokenization_text = tokenization_view(tokenizer, clean_text)`, then call
+`encode_result(tokenizer, tokenization_text; assume_normalized=true, ...)`.
+Word and subword offsets must both be interpreted in the same `tokenization_text`
+coordinate system.

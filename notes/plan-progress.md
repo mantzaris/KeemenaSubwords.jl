@@ -56,3 +56,41 @@
 
 - `julia --project=. -e 'using Pkg; Pkg.test()'` -> pass
 - `julia --project=docs docs/make.jl` -> pass
+
+## Iteration 22
+
+- Added and exported explicit offset convention helpers:
+  - `offsets_index_base() == 1`
+  - `offsets_span_style() == :half_open`
+  - `offsets_sentinel() == (0, 0)`
+  - `has_span(offset)`
+- Kept `offsets_coordinate_system() == :utf8_codeunits` and updated internal
+  sentinel injection to use `offsets_sentinel()`.
+- Hardened HF special-token semantics:
+  - introduced HF-specific special-token masking that includes tokenizer-defined
+    special ids (including special added tokens),
+  - added HF span-aware segmentation for offsets so present-in-text added tokens
+    retain real spans while inserted template specials keep sentinel spans.
+- Added fixture `test/fixtures/hf_json_special_spans/tokenizer.json` and tests
+  proving:
+  - inserted specials -> mask 1 + sentinel `(0, 0)`,
+  - present-in-text special added token -> mask 1 + real span.
+- Reworked Section 22 tests in `test/runtests.jl`:
+  - explicit helper API assertions,
+  - cross-family bounds/sentinel/monotonicity checks,
+  - 1-based regression guard (`start == 1`),
+  - dedicated ByteLevel whitespace-sensitive invariants.
+- Established canonical contract source and drift prevention:
+  - canonical file: `notes/OffsetContract.md`,
+  - compatibility pointer retained at `notes/OffesetContract.md`,
+  - new sync/check tool: `tools/sync_offset_contract.jl`,
+  - CI check added: `.github/workflows/CI.yml` runs
+    `julia --project=. tools/sync_offset_contract.jl --check`.
+- Synced docs contract page from canonical notes source and updated docs/API text
+  to explicitly state 1-based bounds, sentinel meaning, and alignment rules.
+
+### Iteration 22 validation
+
+- `julia --project=. -e "using Pkg; Pkg.test()"` -> pass
+- `julia --project=docs docs/make.jl` -> pass
+- `julia --project=. tools/sync_offset_contract.jl --check` -> pass

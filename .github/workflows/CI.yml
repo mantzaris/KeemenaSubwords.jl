@@ -45,6 +45,8 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
       - name: Verify model inventory sync
         run: julia --project=. tools/sync_readme_models.jl --check
+      - name: Verify offset contract sync
+        run: julia --project=. tools/sync_offset_contract.jl --check
       - name: Validate docs examples
         run: julia --project=. tools/check_docs_examples.jl
       - uses: julia-actions/julia-runtest@v1

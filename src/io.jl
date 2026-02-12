@@ -479,6 +479,16 @@ function _special_tokens_mask(
     return [id in special_ids ? 1 : 0 for id in ids]
 end
 
+function _special_tokens_mask(
+    tokenizer::HuggingFaceJSONTokenizer,
+    ids::AbstractVector{Int},
+)::Vector{Int}
+    special_ids = Set{Int}()
+    union!(special_ids, values(tokenizer.special_token_ids))
+    union!(special_ids, values(tokenizer.token_special_ids))
+    return [id in special_ids ? 1 : 0 for id in ids]
+end
+
 function _encode_result_offsets(
     tokenizer::AbstractSubwordTokenizer,
     text::String,
@@ -500,7 +510,198 @@ function _encode_result_offsets(
     return _inject_special_offsets(ids, base_ids, base_offsets)
 end
 
+function _encode_result_offsets(
+    tokenizer::HuggingFaceJSONTokenizer,
+    text::String,
+    ids::Vector{Int};
+    add_special_tokens::Bool,
+)::Union{Nothing,Vector{Tuple{Int,Int}}}
+    base_ids = _encode_assume_normalized(tokenizer, text; add_special_tokens=false)
+    segments = _segment_hf_input_with_spans(tokenizer, text)
+    base_offsets = _hf_offsets_from_segments(tokenizer, segments, base_ids)
+    base_offsets === nothing && return nothing
+
+    if !add_special_tokens
+        ids == base_ids || return nothing
+        return base_offsets
+    end
+
+    return _inject_special_offsets(ids, base_ids, base_offsets)
+end
+
 _token_offsets_for_tokens(::AbstractSubwordTokenizer, ::String, ::Vector{String}, ::Vector{Int}) = nothing
+
+function _segment_hf_input_with_spans(
+    tokenizer::HuggingFaceJSONTokenizer,
+    text::String,
+)::Vector{NamedTuple{(:kind, :text, :id, :start, :stop),Tuple{Symbol,String,Int,Int,Int}}}
+    special_pass = _split_with_added_patterns_with_spans(text, tokenizer.special_added_patterns)
+    out = NamedTuple{(:kind, :text, :id, :start, :stop),Tuple{Symbol,String,Int,Int,Int}}[]
+
+    for seg in special_pass
+        if seg.kind == :added
+            push!(out, seg)
+            continue
+        end
+
+        raw_pass = _split_with_added_patterns_with_spans(seg.text, tokenizer.raw_added_patterns)
+        for raw_seg in raw_pass
+            raw_global = _segment_local_to_global(raw_seg, seg.start)
+            if raw_seg.kind == :added
+                push!(out, raw_global)
+                continue
+            end
+
+            normalized_pass = _split_with_added_patterns_with_spans(raw_seg.text, tokenizer.normalized_added_patterns)
+            for normalized_seg in normalized_pass
+                push!(out, _segment_local_to_global(normalized_seg, raw_global.start))
+            end
+        end
+    end
+
+    return out
+end
+
+function _split_with_added_patterns_with_spans(
+    text::String,
+    patterns::Vector{HFAddedTokenPattern},
+)::Vector{NamedTuple{(:kind, :text, :id, :start, :stop),Tuple{Symbol,String,Int,Int,Int}}}
+    segments = NamedTuple{(:kind, :text, :id, :start, :stop),Tuple{Symbol,String,Int,Int,Int}}[]
+    isempty(text) && return segments
+
+    text_start = firstindex(text)
+    text_stop = lastindex(text)
+    text_stop_exclusive = ncodeunits(text) + 1
+
+    if isempty(patterns)
+        push!(segments, (kind=:text, text=text, id=0, start=text_start, stop=text_stop_exclusive))
+        return segments
+    end
+
+    i = text_start
+    chunk_start = i
+
+    while i <= text_stop
+        best = _best_added_match(text, i, patterns)
+        if best === nothing
+            i = nextind(text, i)
+            continue
+        end
+
+        if chunk_start < best.start
+            prev_idx = prevind(text, best.start)
+            push!(segments, (
+                kind=:text,
+                text=String(SubString(text, chunk_start, prev_idx)),
+                id=0,
+                start=chunk_start,
+                stop=best.start,
+            ))
+        end
+
+        push!(segments, (
+            kind=:added,
+            text=best.content,
+            id=best.id,
+            start=best.start,
+            stop=nextind(text, best.stop),
+        ))
+
+        i = nextind(text, best.stop)
+        chunk_start = i
+    end
+
+    if chunk_start <= text_stop
+        push!(segments, (
+            kind=:text,
+            text=String(SubString(text, chunk_start, text_stop)),
+            id=0,
+            start=chunk_start,
+            stop=text_stop_exclusive,
+        ))
+    end
+
+    return segments
+end
+
+function _segment_local_to_global(
+    segment::NamedTuple{(:kind, :text, :id, :start, :stop),Tuple{Symbol,String,Int,Int,Int}},
+    global_start::Int,
+)::NamedTuple{(:kind, :text, :id, :start, :stop),Tuple{Symbol,String,Int,Int,Int}}
+    return (
+        kind = segment.kind,
+        text = segment.text,
+        id = segment.id,
+        start = _advance_codeunits(global_start, segment.start - offsets_index_base()),
+        stop = _advance_codeunits(global_start, segment.stop - offsets_index_base()),
+    )
+end
+
+function _hf_offsets_from_segments(
+    tokenizer::HuggingFaceJSONTokenizer,
+    segments::Vector{NamedTuple{(:kind, :text, :id, :start, :stop),Tuple{Symbol,String,Int,Int,Int}}},
+    base_ids::Vector{Int},
+)::Union{Nothing,Vector{Tuple{Int,Int}}}
+    offsets = Tuple{Int,Int}[]
+    token_idx = 1
+
+    for seg in segments
+        if seg.kind == :added
+            token_idx <= length(base_ids) || return nothing
+            base_ids[token_idx] == seg.id || return nothing
+            push!(offsets, (seg.start, seg.stop))
+            token_idx += 1
+            continue
+        end
+
+        pretokenized = _apply_hf_pretokenizer(tokenizer.pretokenizer, seg.text)
+        seg_ids = _encode_hf_model_segment(tokenizer, pretokenized)
+        seg_tokens = String[id_to_token(tokenizer, id) for id in seg_ids]
+        local_offsets = _hf_local_model_offsets(tokenizer, seg.text, seg_tokens, seg_ids)
+        local_offsets === nothing && return nothing
+        length(local_offsets) == length(seg_ids) || return nothing
+
+        for seg_id in seg_ids
+            token_idx <= length(base_ids) || return nothing
+            base_ids[token_idx] == seg_id || return nothing
+            token_idx += 1
+        end
+
+        if seg.start == offsets_index_base()
+            append!(offsets, local_offsets)
+        else
+            shifted = _shift_offsets(local_offsets, seg.start - offsets_index_base())
+            shifted === nothing && return nothing
+            append!(offsets, shifted)
+        end
+    end
+
+    token_idx == length(base_ids) + 1 || return nothing
+    return offsets
+end
+
+function _hf_local_model_offsets(
+    tokenizer::HuggingFaceJSONTokenizer,
+    text::String,
+    tokens::Vector{String},
+    ids::Vector{Int},
+)::Union{Nothing,Vector{Tuple{Int,Int}}}
+    pre = tokenizer.pretokenizer
+
+    if pre isa HFNoopPreTokenizer || pre isa HFWhitespacePreTokenizer
+        return _token_offsets_for_tokens(tokenizer.base, text, tokens, ids)
+    elseif pre isa HFByteLevelPreTokenizer
+        pretokenized = _apply_hf_pretokenizer(pre, text)
+        base_offsets = _token_offsets_for_tokens(tokenizer.base, pretokenized, tokens, ids)
+        base_offsets === nothing && return nothing
+        shift = pre.add_prefix_space && !isempty(text) && !startswith(text, " ") ? -1 : 0
+        return shift == 0 ? base_offsets : _shift_offsets(base_offsets, shift)
+    elseif pre isa HFMetaspacePreTokenizer
+        return _hf_metaspace_offsets(tokenizer, text, tokens, pre)
+    end
+
+    return nothing
+end
 
 function _token_offsets_for_tokens(
     tokenizer::WordPieceTokenizer,
@@ -826,13 +1027,14 @@ function _inject_special_offsets(
     base_ids::Vector{Int},
     base_offsets::Vector{Tuple{Int,Int}},
 )::Union{Nothing,Vector{Tuple{Int,Int}}}
-    isempty(base_ids) && return [(0, 0) for _ in all_ids]
+    sentinel = offsets_sentinel()
+    isempty(base_ids) && return [sentinel for _ in all_ids]
     length(base_ids) == length(base_offsets) || return nothing
 
     match_range = _find_subsequence_range(all_ids, base_ids)
     match_range === nothing && return nothing
 
-    offsets = [(0, 0) for _ in all_ids]
+    offsets = [sentinel for _ in all_ids]
     start_idx, stop_idx = match_range
     for (i, base_offset) in enumerate(base_offsets)
         offsets[start_idx + i - 1] = base_offset

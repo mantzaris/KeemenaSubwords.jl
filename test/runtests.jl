@@ -6,18 +6,43 @@ fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
 const _DOWNLOAD_TESTS = get(ENV, "KEEMENA_TEST_DOWNLOADS", get(ENV, "KEEMENA_RUN_NETWORK_TESTS", "0")) == "1"
 include("helpers/corpus.jl")
 
-function _assert_offset_invariants(
+function _assert_offset_contract(
     text::String,
     offsets::Vector{Tuple{Int,Int}},
 )::Nothing
-    prev_stop = 1
-    max_stop = ncodeunits(text) + 1
-    for (start_idx, stop_idx) in offsets
-        @test 1 <= start_idx <= stop_idx <= max_stop
-        @test start_idx >= prev_stop
+    base = offsets_index_base()
+    max_stop = ncodeunits(text) + base
+    prev_start = base
+    prev_stop = base
+    seen_spanful = false
+
+    for offset in offsets
+        if !has_span(offset)
+            @test offset == offsets_sentinel()
+            continue
+        end
+
+        start_idx, stop_idx = offset
+        @test base <= start_idx <= stop_idx <= max_stop
+
+        if seen_spanful
+            @test start_idx >= prev_start
+            @test stop_idx >= prev_stop
+        end
+
+        prev_start = start_idx
         prev_stop = stop_idx
+        seen_spanful = true
     end
+
     return nothing
+end
+
+function _span_text(text::String, offset::Tuple{Int,Int})::String
+    has_span(offset) || return ""
+    start_idx, stop_idx = offset
+    stop_idx > start_idx || return ""
+    return String(SubString(text, start_idx, prevind(text, stop_idx)))
 end
 
 @testset "KeemenaSubwords sections 1-21" begin
@@ -758,8 +783,13 @@ end
         @test any(s -> length(s) >= 8192, corpus)
     end
 
-    @testset "Section 22 normalization and offsets contract" begin
+    @testset "Section 22 offset contract invariants" begin
         @test offsets_coordinate_system() == :utf8_codeunits
+        @test offsets_index_base() == 1
+        @test offsets_span_style() == :half_open
+        @test offsets_sentinel() == (0, 0)
+        @test !has_span(offsets_sentinel())
+        @test has_span((1, 1))
 
         @testset "Normalization bypass correctness" begin
             tok = load_hf_tokenizer_json(fixture("hf_json_wordpiece", "tokenizer.json"))
@@ -785,84 +815,187 @@ end
 
             @test direct.ids == bypass.ids
             @test bypass.offsets !== nothing
-            _assert_offset_invariants(normalized, bypass.offsets)
+            _assert_offset_contract(normalized, bypass.offsets)
         end
 
-        @testset "Offsets reference provided normalized text" begin
-            tok = load_hf_tokenizer_json(fixture("hf_json_wordpiece", "tokenizer.json"))
-            normalized = normalize(tok, "HELLO WORLD")
+        @testset "Inserted versus present-in-text special spans" begin
+            tok = load_hf_tokenizer_json(fixture("hf_json_special_spans", "tokenizer.json"))
+            normalized = normalize(tok, "[SPECIAL] i")
             result = encode_result(
                 tok,
                 normalized;
+                assume_normalized=true,
+                add_special_tokens=true,
+                return_offsets=true,
+                return_masks=true,
+            )
+
+            @test result.offsets !== nothing
+            @test result.special_tokens_mask !== nothing
+            @test length(result.offsets) == length(result.ids)
+            _assert_offset_contract(normalized, result.offsets)
+
+            cls_idx = findfirst(==("[CLS]"), result.tokens)
+            sep_idx = findlast(==("[SEP]"), result.tokens)
+            present_idx = findfirst(==("[SPECIAL]"), result.tokens)
+
+            @test cls_idx !== nothing
+            @test sep_idx !== nothing
+            @test present_idx !== nothing
+
+            @test result.special_tokens_mask[cls_idx] == 1
+            @test result.special_tokens_mask[sep_idx] == 1
+            @test result.offsets[cls_idx] == offsets_sentinel()
+            @test result.offsets[sep_idx] == offsets_sentinel()
+
+            @test result.special_tokens_mask[present_idx] == 1
+            @test has_span(result.offsets[present_idx])
+            @test _span_text(normalized, result.offsets[present_idx]) == "[SPECIAL]"
+        end
+
+        @testset "Cross-family bounds, sentinel, and monotonicity" begin
+            cases = (
+                (
+                    label="tiktoken",
+                    tokenizer=load_tiktoken(fixture("tiktoken_model", "tokenizer.model")),
+                    add_special=false,
+                    texts=["hi", "hello", "hi hi", "hello hi", "hi hello"],
+                ),
+                (
+                    label="bytebpe",
+                    tokenizer=load_bpe_gpt2(fixture("bpe_gpt2", "vocab.json"), fixture("bpe_gpt2", "merges.txt")),
+                    add_special=true,
+                    texts=["hello world", "hello  world", "hello\tworld"],
+                ),
+                (
+                    label="wordpiece",
+                    tokenizer=load_wordpiece(fixture("wordpiece", "vocab.txt")),
+                    add_special=true,
+                    texts=["hello world", "hello", "hello keemena"],
+                ),
+                (
+                    label="sentencepiece_unigram",
+                    tokenizer=load_sentencepiece(model_path(:core_sentencepiece_unigram_en)),
+                    add_special=true,
+                    texts=["hello world", "hello", "world"],
+                ),
+                (
+                    label="sentencepiece_bpe",
+                    tokenizer=load_sentencepiece(fixture("sentencepiece", "toy_bpe.model")),
+                    add_special=true,
+                    texts=["hello world", "hello", "world"],
+                ),
+                (
+                    label="unigram_tsv",
+                    tokenizer=load_unigram(fixture("unigram", "unigram.tsv")),
+                    add_special=true,
+                    texts=["hello world", "hello", "world"],
+                ),
+                (
+                    label="hf_wordpiece_json",
+                    tokenizer=load_hf_tokenizer_json(fixture("hf_json_wordpiece", "tokenizer.json")),
+                    add_special=true,
+                    texts=["hello world", "hello", "hello world"],
+                ),
+                (
+                    label="hf_bpe_json",
+                    tokenizer=load_hf_tokenizer_json(fixture("hf_json_bytelevel_bpe", "tokenizer.json")),
+                    add_special=true,
+                    texts=["hello world", " hello world", "hello  world"],
+                ),
+                (
+                    label="hf_unigram_json",
+                    tokenizer=load_hf_tokenizer_json(fixture("hf_json_unigram_metaspace", "tokenizer.json")),
+                    add_special=true,
+                    texts=["hello world", "hello", "world"],
+                ),
+            )
+
+            for case in cases
+                @testset "$(case.label)" begin
+                    for text in case.texts
+                        normalized = normalize(case.tokenizer, text)
+                        result = encode_result(
+                            case.tokenizer,
+                            normalized;
+                            add_special_tokens=case.add_special,
+                            assume_normalized=true,
+                            return_offsets=true,
+                            return_masks=true,
+                        )
+
+                        @test result.offsets !== nothing
+                        @test length(result.ids) == length(result.tokens)
+                        @test length(result.offsets) == length(result.ids)
+                        @test length(result.attention_mask) == length(result.ids)
+                        @test length(result.token_type_ids) == length(result.ids)
+                        @test length(result.special_tokens_mask) == length(result.ids)
+
+                        for offset in result.offsets
+                            @test has_span(offset) == (offset != offsets_sentinel())
+                        end
+                        _assert_offset_contract(normalized, result.offsets)
+                    end
+                end
+            end
+        end
+
+        @testset "1-based regression guard" begin
+            wp = load_wordpiece(fixture("wordpiece", "vocab.txt"))
+            result = encode_result(
+                wp,
+                "hello";
                 add_special_tokens=false,
                 assume_normalized=true,
                 return_offsets=true,
                 return_masks=true,
             )
 
-            @test result.tokens == ["hello", "world"]
-            @test result.offsets == [(1, 6), (7, 12)]
-            _assert_offset_invariants(normalized, result.offsets)
+            @test result.offsets !== nothing
+            first_span_idx = findfirst(has_span, result.offsets)
+            @test first_span_idx !== nothing
+            @test result.offsets[first_span_idx][1] == offsets_index_base()
         end
 
-        @testset "TemplateProcessing special token sentinel offsets" begin
-            tok = load_hf_tokenizer_json(fixture("hf_json_wordpiece", "tokenizer.json"))
-            normalized = normalize(tok, "HELLO WORLD")
-            result = encode_result(
+        @testset "ByteLevel and whitespace-sensitive offsets" begin
+            tok = load_hf_tokenizer_json(fixture("hf_json_bytelevel_bpe", "tokenizer.json"))
+            whitespace_cases = [
+                "hello world",
+                " hello world",
+                "hello  world",
+                "hello\tworld",
+                "hello\nworld",
+                "  hello\tworld\n",
+            ]
+
+            for text in whitespace_cases
+                normalized = normalize(tok, text)
+                result = encode_result(
+                    tok,
+                    normalized;
+                    assume_normalized=true,
+                    add_special_tokens=false,
+                    return_offsets=true,
+                    return_masks=true,
+                )
+
+                @test result.offsets !== nothing
+                _assert_offset_contract(normalized, result.offsets)
+            end
+
+            prefix_space_case = normalize(tok, "hello world")
+            prefix_space_result = encode_result(
                 tok,
-                normalized;
-                add_special_tokens=true,
+                prefix_space_case;
                 assume_normalized=true,
+                add_special_tokens=false,
                 return_offsets=true,
                 return_masks=true,
             )
-
-            @test result.special_tokens_mask !== nothing
-            @test result.offsets !== nothing
-            @test first(result.special_tokens_mask) == 1
-            @test last(result.special_tokens_mask) == 1
-
-            for (mask, offset) in zip(result.special_tokens_mask, result.offsets)
-                if mask == 1
-                    @test offset == (0, 0)
-                end
-            end
-        end
-
-        @testset "Family coverage smoke with assume_normalized offsets" begin
-            cases = (
-                (label="tiktoken", tokenizer=load_tiktoken(fixture("tiktoken_model", "tokenizer.model")), text="hello", add_special=false),
-                (label="bytebpe", tokenizer=load_bpe_gpt2(fixture("bpe_gpt2", "vocab.json"), fixture("bpe_gpt2", "merges.txt")), text="hello world", add_special=false),
-                (label="wordpiece", tokenizer=load_wordpiece(fixture("wordpiece", "vocab.txt")), text="hello keemena", add_special=false),
-                (label="sentencepiece_unigram", tokenizer=load_sentencepiece(model_path(:core_sentencepiece_unigram_en)), text="hello world", add_special=false),
-                (label="sentencepiece_bpe", tokenizer=load_sentencepiece(fixture("sentencepiece", "toy_bpe.model")), text="hello", add_special=false),
-                (label="unigram_tsv", tokenizer=load_unigram(fixture("unigram", "unigram.tsv")), text="hello world", add_special=false),
-                (label="hf_wordpiece_json", tokenizer=load_hf_tokenizer_json(fixture("hf_json_wordpiece", "tokenizer.json")), text="hello world", add_special=false),
-                (label="hf_bpe_json", tokenizer=load_hf_tokenizer_json(fixture("hf_json_byte_fallback", "tokenizer.json")), text="a", add_special=false),
-                (label="hf_unigram_json", tokenizer=load_hf_tokenizer_json(fixture("hf_json_unigram_metaspace", "tokenizer.json")), text="hello world", add_special=false),
-            )
-
-            for case in cases
-                @testset "$(case.label)" begin
-                    normalized = normalize(case.tokenizer, case.text)
-                    result = encode_result(
-                        case.tokenizer,
-                        normalized;
-                        add_special_tokens=case.add_special,
-                        assume_normalized=true,
-                        return_offsets=true,
-                        return_masks=true,
-                    )
-
-                    @test result.offsets !== nothing
-                    @test length(result.ids) == length(result.tokens)
-                    @test length(result.offsets) == length(result.ids)
-                    @test length(result.attention_mask) == length(result.ids)
-                    @test length(result.token_type_ids) == length(result.ids)
-                    @test length(result.special_tokens_mask) == length(result.ids)
-                    _assert_offset_invariants(normalized, result.offsets)
-                end
-            end
+            @test prefix_space_result.offsets !== nothing
+            first_span_idx = findfirst(has_span, prefix_space_result.offsets)
+            @test first_span_idx !== nothing
+            @test prefix_space_result.offsets[first_span_idx][1] == offsets_index_base()
         end
     end
 
