@@ -1,5 +1,14 @@
 (tokenizer::HuggingFaceJSONTokenizer)(text::AbstractString)::Vector{String} = tokenize(tokenizer, text)
 
+function normalize(
+    tokenizer::HuggingFaceJSONTokenizer,
+    text::AbstractString,
+)::String
+    return _apply_hf_normalizer(tokenizer.normalizer, String(text))
+end
+
+requires_tokenizer_normalization(::HuggingFaceJSONTokenizer)::Bool = true
+
 function tokenize(tokenizer::HuggingFaceJSONTokenizer, text::AbstractString)::Vector{String}
     ids = encode(tokenizer, text; add_special_tokens=false)
     return String[id_to_token(tokenizer, id) for id in ids]
@@ -9,8 +18,9 @@ function encode(
     tokenizer::HuggingFaceJSONTokenizer,
     text::AbstractString;
     add_special_tokens::Bool=false,
+    assume_normalized::Bool=false,
 )::Vector{Int}
-    segments = _segment_hf_input(tokenizer, String(text))
+    segments = _segment_hf_input(tokenizer, String(text); assume_normalized=assume_normalized)
     ids = Int[]
 
     for seg in segments
@@ -47,6 +57,8 @@ end
 function _segment_hf_input(
     tokenizer::HuggingFaceJSONTokenizer,
     text::String,
+    ;
+    assume_normalized::Bool=false,
 )::Vector{NamedTuple{(:kind, :text, :id),Tuple{Symbol,String,Int}}}
     special_pass = _split_with_added_patterns(text, tokenizer.special_added_patterns)
     out = NamedTuple{(:kind, :text, :id),Tuple{Symbol,String,Int}}[]
@@ -64,7 +76,7 @@ function _segment_hf_input(
                 continue
             end
 
-            normalized = _apply_hf_normalizer(tokenizer.normalizer, raw_seg.text)
+            normalized = assume_normalized ? raw_seg.text : _apply_hf_normalizer(tokenizer.normalizer, raw_seg.text)
             normalized_pass = _split_with_added_patterns(normalized, tokenizer.normalized_added_patterns)
             append!(out, normalized_pass)
         end

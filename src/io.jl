@@ -401,14 +401,24 @@ function encode_result(
     tokenizer::AbstractSubwordTokenizer,
     text::AbstractString;
     add_special_tokens::Bool=true,
+    assume_normalized::Bool=false,
     return_offsets::Bool=false,
     return_masks::Bool=false,
 )::TokenizationResult
     raw_text = String(text)
-    ids = encode(tokenizer, raw_text; add_special_tokens=add_special_tokens)
+    tokenization_text = assume_normalized ? raw_text : tokenization_view(tokenizer, raw_text)
+
+    ids = assume_normalized ?
+        _encode_assume_normalized(tokenizer, tokenization_text; add_special_tokens=add_special_tokens) :
+        encode(tokenizer, raw_text; add_special_tokens=add_special_tokens)
     tokens = String[id_to_token(tokenizer, id) for id in ids]
 
-    offsets = return_offsets ? _encode_result_offsets(tokenizer, raw_text, ids; add_special_tokens=add_special_tokens) : nothing
+    offsets = return_offsets ? _encode_result_offsets(
+        tokenizer,
+        tokenization_text,
+        ids;
+        add_special_tokens=add_special_tokens,
+    ) : nothing
     attention_mask = return_masks ? fill(1, length(ids)) : nothing
     token_type_ids = return_masks ? fill(0, length(ids)) : nothing
     special_tokens_mask = return_masks ? _special_tokens_mask(tokenizer, ids) : nothing
@@ -418,7 +428,9 @@ function encode_result(
         format = info.format,
         model_name = info.model_name,
         add_special_tokens = add_special_tokens,
-        offsets_coordinates = :normalized,
+        assume_normalized = assume_normalized,
+        offsets_coordinates = offsets_coordinate_system(),
+        offsets_reference = assume_normalized ? :input_text : :tokenizer_normalized_text,
     )
 
     return TokenizationResult(
@@ -443,6 +455,22 @@ function encode_batch_result(
     return [encode_result(tokenizer, text; kwargs...) for text in texts]
 end
 
+function _encode_assume_normalized(
+    tokenizer::AbstractSubwordTokenizer,
+    text::String;
+    add_special_tokens::Bool,
+)::Vector{Int}
+    return encode(tokenizer, text; add_special_tokens=add_special_tokens)
+end
+
+function _encode_assume_normalized(
+    tokenizer::HuggingFaceJSONTokenizer,
+    text::String;
+    add_special_tokens::Bool,
+)::Vector{Int}
+    return encode(tokenizer, text; add_special_tokens=add_special_tokens, assume_normalized=true)
+end
+
 function _special_tokens_mask(
     tokenizer::AbstractSubwordTokenizer,
     ids::AbstractVector{Int},
@@ -457,11 +485,11 @@ function _encode_result_offsets(
     ids::Vector{Int};
     add_special_tokens::Bool,
 )::Union{Nothing,Vector{Tuple{Int,Int}}}
-    base_ids = encode(tokenizer, text; add_special_tokens=false)
-    base_tokens = tokenize(tokenizer, text)
+    base_ids = _encode_assume_normalized(tokenizer, text; add_special_tokens=false)
+    base_tokens = String[id_to_token(tokenizer, id) for id in base_ids]
 
     length(base_tokens) == length(base_ids) || return nothing
-    base_offsets = _token_offsets_for_tokens(tokenizer, normalize_text(text), base_tokens)
+    base_offsets = _token_offsets_for_tokens(tokenizer, text, base_tokens, base_ids)
     base_offsets === nothing && return nothing
 
     if !add_special_tokens
@@ -472,13 +500,15 @@ function _encode_result_offsets(
     return _inject_special_offsets(ids, base_ids, base_offsets)
 end
 
-_token_offsets_for_tokens(::AbstractSubwordTokenizer, ::String, ::Vector{String}) = nothing
+_token_offsets_for_tokens(::AbstractSubwordTokenizer, ::String, ::Vector{String}, ::Vector{Int}) = nothing
 
 function _token_offsets_for_tokens(
     tokenizer::WordPieceTokenizer,
     normalized::String,
     tokens::Vector{String},
+    ids::Vector{Int},
 )::Union{Nothing,Vector{Tuple{Int,Int}}}
+    _ = ids
     function _strip_wordpiece(piece::String)::String
         if startswith(piece, tokenizer.continuation_prefix)
             start_idx = nextind(piece, firstindex(piece), length(tokenizer.continuation_prefix))
@@ -501,7 +531,9 @@ function _token_offsets_for_tokens(
     tokenizer::BPETokenizer,
     normalized::String,
     tokens::Vector{String},
+    ids::Vector{Int},
 )::Union{Nothing,Vector{Tuple{Int,Int}}}
+    _ = ids
     marker = tokenizer.end_of_word_marker
     strip_piece = marker === nothing ?
         (piece -> piece) :
@@ -520,7 +552,9 @@ function _token_offsets_for_tokens(
     tokenizer::UnigramTokenizer,
     normalized::String,
     tokens::Vector{String},
+    ids::Vector{Int},
 )::Union{Nothing,Vector{Tuple{Int,Int}}}
+    _ = ids
     isempty(tokenizer.whitespace_marker) || return nothing
     return _wordwise_piece_offsets(
         normalized,
@@ -529,6 +563,113 @@ function _token_offsets_for_tokens(
         unk_token=tokenizer.unk_token,
         strip_token=piece -> piece,
     )
+end
+
+function _token_offsets_for_tokens(
+    tokenizer::ByteBPETokenizer,
+    normalized::String,
+    tokens::Vector{String},
+    ids::Vector{Int},
+)::Union{Nothing,Vector{Tuple{Int,Int}}}
+    _ = ids
+    offsets = Tuple{Int,Int}[]
+    token_idx = 1
+
+    for (start_idx, _, word) in _word_spans(normalized)
+        pieces = _tokenize_byte_word(tokenizer, word)
+        token_idx + length(pieces) - 1 <= length(tokens) || return nothing
+        local_end = _advance_codeunits(start_idx, ncodeunits(word))
+        cursor = start_idx
+
+        for piece in pieces
+            current = tokens[token_idx]
+            current == piece || return nothing
+
+            if piece == tokenizer.base.unk_token
+                push!(offsets, (start_idx, local_end))
+                cursor = local_end
+                token_idx += 1
+                continue
+            end
+
+            piece_bytes = _bytebpe_piece_nbytes(tokenizer, piece)
+            piece_bytes === nothing && return nothing
+            next_cursor = _advance_codeunits(cursor, piece_bytes)
+            push!(offsets, (cursor, next_cursor))
+            cursor = next_cursor
+            token_idx += 1
+        end
+
+        cursor <= local_end || return nothing
+    end
+
+    token_idx == length(tokens) + 1 || return nothing
+    return offsets
+end
+
+function _token_offsets_for_tokens(
+    tokenizer::SentencePieceTokenizer,
+    normalized::String,
+    tokens::Vector{String},
+    ids::Vector{Int},
+)::Union{Nothing,Vector{Tuple{Int,Int}}}
+    _ = ids
+    unk = _unknown_token(tokenizer)
+    unk === nothing && return nothing
+    strip_piece = piece -> replace(piece, tokenizer.whitespace_marker => "")
+
+    return _wordwise_piece_offsets(
+        normalized,
+        tokenizer,
+        tokens;
+        unk_token=unk,
+        strip_token=strip_piece,
+    )
+end
+
+function _token_offsets_for_tokens(
+    tokenizer::TiktokenTokenizer,
+    normalized::String,
+    tokens::Vector{String},
+    ids::Vector{Int},
+)::Union{Nothing,Vector{Tuple{Int,Int}}}
+    length(tokens) == length(ids) || return nothing
+    offsets = Tuple{Int,Int}[]
+    cursor = firstindex(normalized)
+
+    for id in ids
+        1 <= id <= length(tokenizer.id_to_bytes) || return nothing
+        piece_bytes = length(tokenizer.id_to_bytes[id])
+        next_cursor = _advance_codeunits(cursor, piece_bytes)
+        push!(offsets, (cursor, next_cursor))
+        cursor = next_cursor
+    end
+
+    cursor == ncodeunits(normalized) + 1 || return nothing
+    return offsets
+end
+
+function _token_offsets_for_tokens(
+    tokenizer::HuggingFaceJSONTokenizer,
+    normalized::String,
+    tokens::Vector{String},
+    ids::Vector{Int},
+)::Union{Nothing,Vector{Tuple{Int,Int}}}
+    pre = tokenizer.pretokenizer
+
+    if pre isa HFNoopPreTokenizer || pre isa HFWhitespacePreTokenizer
+        return _token_offsets_for_tokens(tokenizer.base, normalized, tokens, ids)
+    elseif pre isa HFByteLevelPreTokenizer
+        pretokenized = _apply_hf_pretokenizer(pre, normalized)
+        base_offsets = _token_offsets_for_tokens(tokenizer.base, pretokenized, tokens, ids)
+        base_offsets === nothing && return nothing
+        shift = pre.add_prefix_space && !isempty(normalized) && !startswith(normalized, " ") ? -1 : 0
+        return shift == 0 ? base_offsets : _shift_offsets(base_offsets, shift)
+    elseif pre isa HFMetaspacePreTokenizer
+        return _hf_metaspace_offsets(tokenizer, normalized, tokens, pre)
+    end
+
+    return nothing
 end
 
 function _wordwise_piece_offsets(
@@ -573,6 +714,54 @@ function _wordwise_piece_offsets(
     return offsets
 end
 
+function _hf_metaspace_offsets(
+    tokenizer::HuggingFaceJSONTokenizer,
+    normalized::String,
+    tokens::Vector{String},
+    pre::HFMetaspacePreTokenizer,
+)::Union{Nothing,Vector{Tuple{Int,Int}}}
+    replacement_len = length(pre.replacement)
+    replacement_len == 0 && return nothing
+
+    unk = _unknown_token(tokenizer.base)
+    unk === nothing && return nothing
+
+    offsets = Tuple{Int,Int}[]
+    token_idx = 1
+
+    for (start_idx, _, word) in _word_spans(normalized)
+        encoded_word = string(pre.replacement, word)
+        pieces = tokenize(tokenizer.base, encoded_word)
+        token_idx + length(pieces) - 1 <= length(tokens) || return nothing
+        local_end = _advance_chars(normalized, start_idx, length(word))
+        cursor = start_idx
+
+        for piece in pieces
+            current = tokens[token_idx]
+            current == piece || return nothing
+
+            if piece == unk
+                push!(offsets, (start_idx, local_end))
+                cursor = local_end
+                token_idx += 1
+                continue
+            end
+
+            clean = replace(piece, pre.replacement => "")
+            span_len = length(clean)
+            next_cursor = span_len == 0 ? cursor : _advance_chars(normalized, cursor, span_len)
+            push!(offsets, (cursor, next_cursor))
+            cursor = next_cursor
+            token_idx += 1
+        end
+
+        cursor <= local_end || return nothing
+    end
+
+    token_idx == length(tokens) + 1 || return nothing
+    return offsets
+end
+
 function _word_spans(text::String)::Vector{Tuple{Int,Int,String}}
     spans = Tuple{Int,Int,String}[]
     for m in eachmatch(r"\S+", text)
@@ -592,6 +781,45 @@ function _advance_chars(text::String, start_idx::Int, count::Int)::Int
     end
     return idx
 end
+
+function _advance_codeunits(start_idx::Int, count::Int)::Int
+    return start_idx + count
+end
+
+function _shift_offsets(
+    offsets::Vector{Tuple{Int,Int}},
+    delta::Int,
+)::Union{Nothing,Vector{Tuple{Int,Int}}}
+    shifted = Tuple{Int,Int}[]
+    for (start_idx, stop_idx) in offsets
+        new_start = start_idx + delta
+        new_stop = stop_idx + delta
+        new_start >= 1 || return nothing
+        new_stop >= new_start || return nothing
+        push!(shifted, (new_start, new_stop))
+    end
+    return shifted
+end
+
+function _bytebpe_piece_nbytes(tokenizer::ByteBPETokenizer, piece::String)::Union{Nothing,Int}
+    marker = tokenizer.base.end_of_word_marker
+    clean = marker === nothing ? piece : replace(piece, marker => "")
+    total = 0
+
+    for c in clean
+        haskey(tokenizer.unicode_to_byte, c) || return nothing
+        total += 1
+    end
+
+    return total
+end
+
+_unknown_token(::AbstractSubwordTokenizer) = nothing
+_unknown_token(tokenizer::WordPieceTokenizer) = tokenizer.unk_token
+_unknown_token(tokenizer::BPETokenizer) = tokenizer.unk_token
+_unknown_token(tokenizer::UnigramTokenizer) = tokenizer.unk_token
+_unknown_token(tokenizer::ByteBPETokenizer) = tokenizer.base.unk_token
+_unknown_token(tokenizer::SentencePieceTokenizer) = _unknown_token(tokenizer.inner)
 
 function _inject_special_offsets(
     all_ids::Vector{Int},

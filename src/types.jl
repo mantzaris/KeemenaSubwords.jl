@@ -72,6 +72,11 @@ end
 
 """
 Structured tokenization output for downstream pipelines.
+
+Offset contract:
+- `offsets` use UTF-8 codeunit indices with half-open spans `[start, stop)`.
+- special tokens are represented with sentinel offset `(0, 0)` and
+  `special_tokens_mask[i] == 1`.
 """
 struct TokenizationResult
     ids::Vector{Int}
@@ -128,6 +133,12 @@ end
 
 """
 Encode text and return a structured `TokenizationResult`.
+
+Key keyword arguments:
+- `assume_normalized::Bool=false`: when `true`, tokenizer intrinsic normalization
+  is skipped and offsets are computed against the provided `text`.
+- `return_offsets::Bool=false`: include token-level offsets when available.
+- `return_masks::Bool=false`: include attention/token-type/special-token masks.
 """
 function encode_result end
 

@@ -41,11 +41,19 @@ load_hf_tokenizer_json("/path/to/tokenizer.json")
 
 ```julia
 tok = load_tokenizer(:core_wordpiece_en)
-result = encode_result(tok, "hello world"; add_special_tokens=false, return_offsets=true, return_masks=true)
+tokenization_text = normalize(tok, "hello world")
+result = encode_result(
+    tok,
+    tokenization_text;
+    assume_normalized=true,
+    add_special_tokens=false,
+    return_offsets=true,
+    return_masks=true,
+)
 
 result.ids
 result.tokens
-result.offsets  # normalized-text coordinates when available
+result.offsets  # UTF-8 codeunit spans on tokenization_text
 ```
 
 For complete local path recipes, see [Loading Tokenizers From Local Paths](loading_local.md).

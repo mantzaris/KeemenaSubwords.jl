@@ -22,6 +22,7 @@ makedocs(
     pages = [
         "Home"          => "index.md",
         "Integration"   => "integration.md",
+        "Normalization & Offsets" => "normalization_offsets_contract.md",
         "Loading"       => "loading.md",
         "Formats"       => "formats.md",
         "Loading Local" => "loading_local.md",

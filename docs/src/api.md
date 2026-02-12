@@ -18,7 +18,9 @@ detect_tokenizer_files
 ```
 
 Structured encoding and file-spec APIs are also part of the public surface:
-`TokenizationResult`, `FilesSpec`, `encode_result`, `encode_batch_result`.
+`TokenizationResult`, `FilesSpec`, `normalize`, `tokenization_view`,
+`requires_tokenizer_normalization`, `offsets_coordinate_system`,
+`encode_result`, `encode_batch_result`.
 
 ## Registry and Installation APIs
 
