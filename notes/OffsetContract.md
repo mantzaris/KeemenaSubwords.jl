@@ -106,3 +106,18 @@ Use these helpers for robust downstream handling:
 - `is_valid_string_boundary(text, idx)` can be used to inspect boundary validity.
 - `offsets_are_nonoverlapping(offsets; ignore_sentinel=true, ignore_empty=true)`
   validates a downstream non-overlap invariant.
+
+## Boundary Validity Expectations By Tokenizer Family
+
+- Non-byte-level tokenizers (for example WordPiece, SentencePiece, Unigram TSV,
+  and non-byte-level HF tokenizer.json pipelines) are expected to produce spanful
+  offsets that land on valid Julia string boundaries.
+- Byte-level tokenizers (for example ByteBPE and HF ByteLevel pretokenizers) may
+  produce non-boundary offsets on multibyte Unicode inputs.
+
+Downstream interpretation:
+
+- When `try_span_substring(text, offset)` returns `nothing` for a byte-level
+  multibyte case, treat this as expected "unsafe to slice" behavior.
+- Use `span_codeunits(text, offset)` for byte-accurate span inspection regardless
+  of string-boundary validity.

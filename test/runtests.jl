@@ -1171,6 +1171,119 @@ end
         end
     end
 
+    @testset "Section 24 boundary-valid offsets guarantees by tokenizer family" begin
+        @testset "Section 24 boundary-valid offsets for string-level tokenizers" begin
+            cases = (
+                (
+                    label="wordpiece",
+                    tokenizer=load_wordpiece(fixture("wordpiece", "vocab.txt")),
+                ),
+                (
+                    label="sentencepiece_unigram",
+                    tokenizer=load_sentencepiece(model_path(:core_sentencepiece_unigram_en)),
+                ),
+                (
+                    label="unigram_tsv",
+                    tokenizer=load_unigram(fixture("unigram", "unigram.tsv")),
+                ),
+                (
+                    label="hf_wordpiece_json",
+                    tokenizer=load_hf_tokenizer_json(fixture("hf_json_wordpiece", "tokenizer.json")),
+                ),
+                (
+                    label="hf_unigram_json",
+                    tokenizer=load_hf_tokenizer_json(fixture("hf_json_unigram_metaspace", "tokenizer.json")),
+                ),
+                (
+                    label="classic_bpe",
+                    tokenizer=load_tokenizer(:core_bpe_en),
+                ),
+            )
+
+            texts = ["cafe\u0301", "é", "🙂", "a🙂b"]
+
+            for case in cases
+                @testset "$(case.label)" begin
+                    for text in texts
+                        normalized = normalize(case.tokenizer, text)
+                        result = encode_result(
+                            case.tokenizer,
+                            normalized;
+                            assume_normalized=true,
+                            add_special_tokens=false,
+                            return_offsets=true,
+                            return_masks=true,
+                        )
+
+                        @test result.offsets !== nothing
+                        _assert_offset_contract(normalized, result.offsets)
+                        @test offsets_are_nonoverlapping(
+                            result.offsets;
+                            ignore_sentinel=true,
+                            ignore_empty=true,
+                        )
+
+                        for offset in result.offsets
+                            has_nonempty_span(offset) || continue
+                            start_idx, stop_idx = offset
+                            @test is_valid_string_boundary(normalized, start_idx)
+                            @test is_valid_string_boundary(normalized, stop_idx)
+                            sub = try_span_substring(normalized, offset)
+                            @test sub isa String
+                            @test Vector{UInt8}(codeunits(sub)) == span_codeunits(normalized, offset)
+                        end
+                    end
+                end
+            end
+        end
+
+        @testset "Section 24 boundary-valid offsets for byte-level tokenizers on ASCII" begin
+            tokenizers = (
+                (
+                    label="bytebpe",
+                    tokenizer=load_bpe_gpt2(fixture("bpe_gpt2", "vocab.json"), fixture("bpe_gpt2", "merges.txt")),
+                ),
+                (
+                    label="hf_bytelevel",
+                    tokenizer=load_hf_tokenizer_json(fixture("hf_json_bytelevel_bpe", "tokenizer.json")),
+                ),
+            )
+
+            texts = ["hello", "hello world", " hello world", "hello  world", "hello\tworld", "hello\nworld"]
+
+            for spec in tokenizers
+                @testset "$(spec.label)" begin
+                    for text in texts
+                        normalized = normalize(spec.tokenizer, text)
+                        result = encode_result(
+                            spec.tokenizer,
+                            normalized;
+                            assume_normalized=true,
+                            add_special_tokens=false,
+                            return_offsets=true,
+                            return_masks=true,
+                        )
+
+                        @test result.offsets !== nothing
+                        _assert_offset_contract(normalized, result.offsets)
+                        @test offsets_are_nonoverlapping(
+                            result.offsets;
+                            ignore_sentinel=true,
+                            ignore_empty=true,
+                        )
+
+                        for offset in result.offsets
+                            has_nonempty_span(offset) || continue
+                            sub = try_span_substring(normalized, offset)
+                            @test sub isa String
+                            @test Vector{UInt8}(codeunits(sub)) == span_codeunits(normalized, offset)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
     include("e2e_user_workflows.jl")
     include("e2e_user_workflows_extended.jl")
     include("test_goldens.jl")
