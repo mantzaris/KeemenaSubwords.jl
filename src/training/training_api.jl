@@ -1,80 +1,41 @@
-"""
-High-level training entry points.
-
-These should accept either:
-- Vector{String} documents
-- iterator of strings
-- (future) file paths
-
-Keep memory predictable where possible.
-"""
-function _normalize_special_tokens(
-    special_tokens::Dict{Symbol,String},
-)::Dict{Symbol,String}
-    normalized = Dict{Symbol,String}()
-
-    alias = Dict(
-        :UNK => :unk,
-        :PAD => :pad,
-        :BOS => :bos,
-        :EOS => :eos,
-    )
-
-    for (sym, tok) in special_tokens
-        mapped = get(alias, sym, sym)
-        normalized[mapped] = tok
-    end
-
-    haskey(normalized, :unk) || (normalized[:unk] = "<UNK>")
-    return normalized
-end
-
-function _ordered_special_token_pairs(
-    special_tokens::Dict{Symbol,String},
-)::Vector{Pair{Symbol,String}}
-    pairs = collect(special_tokens)
-    sort!(pairs; by = p -> (p.first == :unk ? 0 : 1, String(p.first)))
-    return pairs
-end
-
-function _collect_word_counts(
-    corpus;
-    pretokenizer::Union{Nothing,Function}=nothing,
-)::Dict{String,Int}
-    counts = Dict{String,Int}()
-
-    for doc in corpus
-        text = String(doc)
-        pieces = pretokenizer === nothing ? eachsplit(text) : pretokenizer(text)
-
-        for piece in pieces
-            token = String(piece)
-            isempty(token) && continue
-            counts[token] = get(counts, token, 0) + 1
-        end
-    end
-
-    return counts
-end
-
 function train_bpe(
     corpus;
     vocab_size::Int,
     min_frequency::Int=2,
     special_tokens::Dict{Symbol,String}=Dict(:unk => "<UNK>", :pad => "<PAD>"),
     pretokenizer::Union{Nothing,Function}=nothing,
+    end_of_word_marker::String="</w>",
+    model_name::String="trained_bpe",
 )::BPETokenizer
-    vocab_size > 0 || throw(ArgumentError("vocab_size must be positive"))
-    min_frequency > 0 || throw(ArgumentError("min_frequency must be positive"))
-
-    normalized_specials = _normalize_special_tokens(special_tokens)
-    return _train_bpe_impl(
+    return train_bpe_result(
         corpus;
         vocab_size=vocab_size,
         min_frequency=min_frequency,
-        special_tokens=normalized_specials,
+        special_tokens=special_tokens,
         pretokenizer=pretokenizer,
+        end_of_word_marker=end_of_word_marker,
+        model_name=model_name,
+    ).tokenizer
+end
+
+function train_bpe_result(
+    corpus;
+    vocab_size::Int,
+    min_frequency::Int=2,
+    special_tokens::Dict{Symbol,String}=Dict(:unk => "<UNK>", :pad => "<PAD>"),
+    pretokenizer::Union{Nothing,Function}=nothing,
+    end_of_word_marker::String="</w>",
+    model_name::String="trained_bpe",
+)::TrainingResult{BPETokenizer,BPETrainingConfig,BPETrainingArtifacts}
+    config = BPETrainingConfig(
+        vocab_size,
+        min_frequency,
+        _normalize_special_tokens(special_tokens),
+        pretokenizer,
+        String(end_of_word_marker),
+        String(model_name),
     )
+    return _train_bpe_result_impl(corpus, config)
 end
 
 """

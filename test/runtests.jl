@@ -548,7 +548,7 @@ end
         @test tokenize(sp_reload, "hello world") == tokenize(sp, "hello world")
     end
 
-    include("training_runtests.jl")
+    include("training/runtests_training.jl")
 
     @testset "Section 16 docs contracts and loader coherence" begin
         wp_path = fixture("wordpiece", "vocab.txt")
