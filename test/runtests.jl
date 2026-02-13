@@ -1195,6 +1195,10 @@ end
                     tokenizer=load_hf_tokenizer_json(fixture("hf_json_unigram_metaspace", "tokenizer.json")),
                 ),
                 (
+                    label="sentencepiece_bpe",
+                    tokenizer=load_sentencepiece(fixture("sentencepiece", "toy_bpe.model")),
+                ),
+                (
                     label="classic_bpe",
                     tokenizer=load_tokenizer(:core_bpe_en),
                 ),
@@ -1238,22 +1242,27 @@ end
         end
 
         @testset "Section 24 boundary-valid offsets for byte-level tokenizers on ASCII" begin
-            tokenizers = (
+            cases = (
                 (
                     label="bytebpe",
                     tokenizer=load_bpe_gpt2(fixture("bpe_gpt2", "vocab.json"), fixture("bpe_gpt2", "merges.txt")),
+                    texts=["hello", "hello world", " hello world", "hello  world", "hello\tworld", "hello\nworld"],
                 ),
                 (
                     label="hf_bytelevel",
                     tokenizer=load_hf_tokenizer_json(fixture("hf_json_bytelevel_bpe", "tokenizer.json")),
+                    texts=["hello", "hello world", " hello world", "hello  world", "hello\tworld", "hello\nworld"],
+                ),
+                (
+                    label="tiktoken",
+                    tokenizer=load_tiktoken(fixture("tiktoken_model", "tokenizer.model")),
+                    texts=["hello", "hello hello", " hello", "hello  hello", "hi hello"],
                 ),
             )
 
-            texts = ["hello", "hello world", " hello world", "hello  world", "hello\tworld", "hello\nworld"]
-
-            for spec in tokenizers
+            for spec in cases
                 @testset "$(spec.label)" begin
-                    for text in texts
+                    for text in spec.texts
                         normalized = normalize(spec.tokenizer, text)
                         result = encode_result(
                             spec.tokenizer,
@@ -1281,6 +1290,55 @@ end
                     end
                 end
             end
+        end
+    end
+
+    @testset "Section 25 strict offset validators" begin
+        @testset "validate/assert with sentinel and empty spans" begin
+            text = "hello"
+            offsets = [offsets_sentinel(), (1, 1), (1, 2), (2, 2)]
+            @test validate_offsets_contract(text, offsets)
+            @test validate_offsets_contract(text, offsets; require_string_boundaries=true)
+            @test_nowarn assert_offsets_contract(text, offsets)
+            @test_nowarn assert_offsets_contract(text, offsets; require_string_boundaries=true)
+        end
+
+        @testset "known-good offsets from tokenizer output" begin
+            wp = load_wordpiece(fixture("wordpiece", "vocab.txt"))
+            text = normalize(wp, "hello world")
+            result = encode_result(
+                wp,
+                text;
+                assume_normalized=true,
+                add_special_tokens=false,
+                return_offsets=true,
+                return_masks=true,
+            )
+            @test result.offsets !== nothing
+            @test validate_offsets_contract(text, result.offsets)
+            @test validate_offsets_contract(text, result.offsets; require_string_boundaries=true)
+            @test_nowarn assert_offsets_contract(text, result.offsets)
+            @test_nowarn assert_offsets_contract(text, result.offsets; require_string_boundaries=true)
+        end
+
+        @testset "invalid offsets fail fast" begin
+            text = "hello"
+            bad_offsets = [(0, 1), (1, 2)]
+            @test !validate_offsets_contract(text, bad_offsets)
+            @test_throws ArgumentError assert_offsets_contract(text, bad_offsets)
+        end
+
+        @testset "require_string_boundaries option" begin
+            text = "🙂"
+            non_boundary_offsets = [(2, 3)]
+            @test validate_offsets_contract(text, non_boundary_offsets)
+            @test !validate_offsets_contract(text, non_boundary_offsets; require_string_boundaries=true)
+            @test_nowarn assert_offsets_contract(text, non_boundary_offsets)
+            @test_throws ArgumentError assert_offsets_contract(
+                text,
+                non_boundary_offsets;
+                require_string_boundaries=true,
+            )
         end
     end
 

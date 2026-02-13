@@ -1,29 +1,37 @@
 # KeemenaSubwords plan progress
 
-## Iteration 24
+## Iteration 25
 
-### Boundary-valid offsets guarantees by tokenizer family
-- Added a new contract section to `notes/OffsetContract.md` documenting boundary validity expectations by tokenizer family:
-  - non-byte-level tokenizers are expected to produce spanful offsets on valid Julia string boundaries,
-  - byte-level tokenizers may produce non-boundary spans on multibyte Unicode,
-  - downstream should treat `try_span_substring(...) == nothing` as expected for those byte-level multibyte cases and use `span_codeunits(...)`.
-- Synced canonical contract to docs with `tools/sync_offset_contract.jl` so `docs/src/normalization_offsets_contract.md` stays consistent.
+### Minor offsets polish: family coverage + strict validators
 
-### Tests added (Section 24)
-- Added `Section 24 boundary-valid offsets guarantees by tokenizer family` in `test/runtests.jl` with two testsets:
-  - `Section 24 boundary-valid offsets for string-level tokenizers`:
-    - tokenizers: WordPiece fixture, SentencePiece unigram, Unigram TSV, HF WordPiece JSON, HF Unigram JSON (metaspace), classic BPE.
-    - multibyte inputs: `"cafe\u0301"`, `"é"`, `"🙂"`, `"a🙂b"`.
-    - assertions for each non-empty span:
-      - start/stop are valid Julia boundaries via `is_valid_string_boundary`,
-      - `try_span_substring` returns `String` (never `nothing`),
-      - substring codeunits match `span_codeunits`.
-  - `Section 24 boundary-valid offsets for byte-level tokenizers on ASCII`:
-    - tokenizers: ByteBPE fixture and HF ByteLevel fixture.
-    - ASCII inputs: `"hello"`, `"hello world"`, `" hello world"`, `"hello  world"`, `"hello\tworld"`, `"hello\nworld"`.
-    - assertions for each non-empty span:
-      - `try_span_substring` returns `String`,
-      - substring codeunits match `span_codeunits`.
+### Section 24 coverage expansion
+- Expanded `Section 24 boundary-valid offsets for string-level tokenizers` in `test/runtests.jl` to include SentencePiece BPE compatibility:
+  - `load_sentencepiece(fixture("sentencepiece", "toy_bpe.model"))`
+- Expanded `Section 24 boundary-valid offsets for byte-level tokenizers on ASCII` to include `tiktoken` fixture coverage:
+  - `load_tiktoken(fixture("tiktoken_model", "tokenizer.model"))`
+  - used tokenizer-supported ASCII-safe strings for deterministic offline checks.
+
+### Strict validation helpers
+- Added strict offset contract validators in `src/normalization.jl`:
+  - `validate_offsets_contract(text, offsets; require_string_boundaries=false)::Bool`
+  - `assert_offsets_contract(text, offsets; require_string_boundaries=false)::Nothing`
+- Validators check:
+  - sentinel semantics (`(0,0)` is the only zero-index sentinel),
+  - bounds and monotonic span shape (`stop >= start`, `stop <= ncodeunits(text)+1`),
+  - optional string-boundary requirements for non-empty spans when `require_string_boundaries=true`.
+- Exported new helpers in `src/KeemenaSubwords.jl`.
+- Added API listing entry in `docs/src/api.md`.
+
+### Validator tests
+- Added `Section 25 strict offset validators` testset in `test/runtests.jl`:
+  - valid sentinel/empty span vectors -> `validate==true`, `assert` non-throwing,
+  - known-good tokenizer offsets (WordPiece fixture) -> strict validation passes,
+  - intentionally invalid offsets -> `validate==false`, `assert` throws `ArgumentError`,
+  - explicit `require_string_boundaries` behavior on a non-boundary multibyte span.
+
+### Docs
+- Updated canonical contract doc `notes/OffsetContract.md` with a short maintainer/debugging section for strict validators.
+- Synced docs copy via existing sync workflow (`tools/sync_offset_contract.jl`).
 
 ### Validation
 - `julia --project=. -e 'using Pkg; Pkg.test()'` -> pass

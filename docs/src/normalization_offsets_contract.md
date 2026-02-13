@@ -121,3 +121,16 @@ Downstream interpretation:
   multibyte case, treat this as expected "unsafe to slice" behavior.
 - Use `span_codeunits(text, offset)` for byte-accurate span inspection regardless
   of string-boundary validity.
+
+## Strict Validator Helpers (Maintainer Debugging)
+
+For tokenizer development and regression debugging, KeemenaSubwords also exposes
+strict contract validators:
+
+- `validate_offsets_contract(text, offsets; require_string_boundaries=false)`:
+  returns `Bool` without throwing.
+- `assert_offsets_contract(text, offsets; require_string_boundaries=false)`:
+  throws `ArgumentError` on first violation with a targeted message.
+
+Use `require_string_boundaries=true` when validating string-level tokenizers
+where spanful offsets are expected to land on valid Julia string boundaries.

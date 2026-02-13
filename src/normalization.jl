@@ -175,3 +175,86 @@ function offsets_are_nonoverlapping(
     end
     return true
 end
+
+function _offsets_contract_failure(
+    text::AbstractString,
+    offsets::Vector{Tuple{Int,Int}};
+    require_string_boundaries::Bool,
+)::Union{Nothing,String}
+    base = offsets_index_base()
+    max_stop = ncodeunits(text) + base
+    sentinel = offsets_sentinel()
+
+    for (idx, offset) in enumerate(offsets)
+        start_idx, stop_idx = offset
+
+        if offset == sentinel
+            continue
+        end
+
+        if start_idx == 0 || stop_idx == 0
+            return "offset[$idx]=$offset is invalid; only sentinel $(sentinel) may use zero indices"
+        end
+        if start_idx < base || stop_idx < base
+            return "offset[$idx]=$offset is below index base $base"
+        end
+        if stop_idx < start_idx
+            return "offset[$idx]=$offset has stop < start"
+        end
+        if stop_idx > max_stop
+            return "offset[$idx]=$offset exceeds max stop $max_stop for text with ncodeunits=$(ncodeunits(text))"
+        end
+
+        if require_string_boundaries && has_nonempty_span(offset)
+            if !is_valid_string_boundary(text, start_idx)
+                return "offset[$idx]=$offset has non-boundary start index $start_idx"
+            end
+            if !is_valid_string_boundary(text, stop_idx)
+                return "offset[$idx]=$offset has non-boundary stop index $stop_idx"
+            end
+        end
+    end
+
+    return nothing
+end
+
+"""
+Validate offsets against the package offset contract.
+
+Returns `true` when all offsets satisfy bounds/sentinel invariants. With
+`require_string_boundaries=true`, non-empty spans must also start/end on valid
+Julia string boundaries.
+"""
+function validate_offsets_contract(
+    text::AbstractString,
+    offsets::Vector{Tuple{Int,Int}};
+    require_string_boundaries::Bool=false,
+)::Bool
+    failure = _offsets_contract_failure(
+        text,
+        offsets;
+        require_string_boundaries=require_string_boundaries,
+    )
+    return failure === nothing
+end
+
+"""
+Assert offsets satisfy the package offset contract.
+
+Throws `ArgumentError` on first contract violation. With
+`require_string_boundaries=true`, non-empty spans must start/end on valid Julia
+string boundaries.
+"""
+function assert_offsets_contract(
+    text::AbstractString,
+    offsets::Vector{Tuple{Int,Int}};
+    require_string_boundaries::Bool=false,
+)::Nothing
+    failure = _offsets_contract_failure(
+        text,
+        offsets;
+        require_string_boundaries=require_string_boundaries,
+    )
+    failure === nothing || throw(ArgumentError("Offset contract violation: $failure"))
+    return nothing
+end

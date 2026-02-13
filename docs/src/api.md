@@ -23,6 +23,7 @@ Structured encoding and file-spec APIs are also part of the public surface:
 `offsets_index_base`, `offsets_span_style`, `offsets_sentinel`, `has_span`,
 `has_nonempty_span`, `span_ncodeunits`, `span_codeunits`,
 `is_valid_string_boundary`, `try_span_substring`, `offsets_are_nonoverlapping`,
+`validate_offsets_contract`, `assert_offsets_contract`,
 `encode_result`, `encode_batch_result`.
 
 ## Registry and Installation APIs
