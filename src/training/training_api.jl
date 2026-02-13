@@ -1,3 +1,6 @@
+"""
+Train a character-level BPE tokenizer.
+"""
 function train_bpe(
     corpus;
     vocab_size::Int,
@@ -18,6 +21,9 @@ function train_bpe(
     ).tokenizer
 end
 
+"""
+Train a character-level BPE tokenizer and return model artifacts.
+"""
 function train_bpe_result(
     corpus;
     vocab_size::Int,
@@ -36,6 +42,60 @@ function train_bpe_result(
         String(model_name),
     )
     return _train_bpe_result_impl(corpus, config)
+end
+
+"""
+Train a byte-level BPE tokenizer.
+"""
+function train_bytebpe(
+    corpus;
+    vocab_size::Int,
+    min_frequency::Int=2,
+    special_tokens::Dict{Symbol,String}=Dict(:unk => "<UNK>", :pad => "<PAD>"),
+    end_of_word_marker::String="</w>",
+    pretokenizer::Union{Nothing,Function}=nothing,
+    include_full_byte_alphabet::Bool=true,
+    model_name::String="trained_bytebpe",
+    version::VersionNumber=v"0.3.0",
+)::ByteBPETokenizer
+    return train_bytebpe_result(
+        corpus;
+        vocab_size=vocab_size,
+        min_frequency=min_frequency,
+        special_tokens=special_tokens,
+        end_of_word_marker=end_of_word_marker,
+        pretokenizer=pretokenizer,
+        include_full_byte_alphabet=include_full_byte_alphabet,
+        model_name=model_name,
+        version=version,
+    ).tokenizer
+end
+
+"""
+Train a byte-level BPE tokenizer and return model artifacts.
+"""
+function train_bytebpe_result(
+    corpus;
+    vocab_size::Int,
+    min_frequency::Int=2,
+    special_tokens::Dict{Symbol,String}=Dict(:unk => "<UNK>", :pad => "<PAD>"),
+    end_of_word_marker::String="</w>",
+    pretokenizer::Union{Nothing,Function}=nothing,
+    include_full_byte_alphabet::Bool=true,
+    model_name::String="trained_bytebpe",
+    version::VersionNumber=v"0.3.0",
+)::TrainingResult{ByteBPETokenizer,ByteBPETrainingConfig,ByteBPETrainingArtifacts}
+    config = ByteBPETrainingConfig(
+        vocab_size,
+        min_frequency,
+        _normalize_special_tokens(special_tokens),
+        String(end_of_word_marker),
+        pretokenizer,
+        include_full_byte_alphabet,
+        String(model_name),
+        version,
+    )
+    return _train_bytebpe_result_impl(corpus, config)
 end
 
 """

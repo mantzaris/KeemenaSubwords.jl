@@ -103,14 +103,33 @@ function _validate_bpe_config(config::BPETrainingConfig)::Nothing
     return nothing
 end
 
+function _validate_bytebpe_config(config::ByteBPETrainingConfig)::Nothing
+    _validate_positive(config.vocab_size, "vocab_size")
+    _validate_positive(config.min_frequency, "min_frequency")
+    _validate_nonempty(config.end_of_word_marker, "end_of_word_marker")
+    _validate_nonempty(config.model_name, "model_name")
+    haskey(config.special_tokens, :unk) || throw(ArgumentError("special_tokens must include :unk"))
+    return nothing
+end
+
 function _validate_required_vocab_capacity(
     vocab_size::Int,
-    special_vocab_tokens::Vector{String},
-    required_non_special_tokens::Vector{String},
+    required_tokens::Vector{String},
 )::Nothing
-    min_required = length(special_vocab_tokens) + length(required_non_special_tokens)
+    min_required = length(required_tokens)
     vocab_size >= min_required || throw(ArgumentError(
         "vocab_size=$vocab_size is too small: need at least $min_required to keep required special/marker tokens",
     ))
     return nothing
+end
+
+function _push_unique_token!(
+    tokens::Vector{String},
+    token_set::Set{String},
+    token::String,
+)::Bool
+    token in token_set && return false
+    push!(tokens, token)
+    push!(token_set, token)
+    return true
 end

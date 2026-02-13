@@ -9,6 +9,7 @@ CurrentModule = KeemenaSubwords.Training
 
 Available now:
 - `train_bpe(...)`
+- `train_bytebpe(...)`
 - `train_unigram(...)`
 
 Planned (stub entrypoints):
@@ -18,6 +19,10 @@ Planned (stub entrypoints):
 ## Training API
 
 ```@docs
+train_bpe
+train_bpe_result
+train_bytebpe
+train_bytebpe_result
 train_unigram
 train_wordpiece
 train_sentencepiece

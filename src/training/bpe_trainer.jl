@@ -9,69 +9,52 @@ function _train_bpe_result_impl(
     marker = config.end_of_word_marker
     ordered_special_pairs = _ordered_special_token_pairs(config.special_tokens)
     special_vocab_tokens = _ordered_special_token_values(config.special_tokens)
-    special_token_set = Set(special_vocab_tokens)
+    required_non_special = _required_non_special_tokens(config.special_tokens, marker)
 
-    required_tokens = String[config.special_tokens[:unk], marker]
-    unique_required = String[]
-    for token in required_tokens
-        token in unique_required || push!(unique_required, token)
-    end
-    required_non_special = [token for token in unique_required if !(token in special_token_set)]
+    words, freqs = _char_bpe_sequences(word_counts, marker)
+    base_alphabet = _base_alphabet_from_sequences(words; marker=marker)
+    vocab_tokens, vocab_token_set = _initialize_bpe_vocab_tokens(
+        special_vocab_tokens,
+        required_non_special,
+        base_alphabet,
+        config.vocab_size,
+    )
 
-    _validate_required_vocab_capacity(config.vocab_size, special_vocab_tokens, required_non_special)
+    merge_pairs, pair_ranks = _run_merge_driven_training!(
+        words,
+        freqs,
+        vocab_tokens,
+        vocab_token_set;
+        vocab_size=config.vocab_size,
+        min_frequency=config.min_frequency,
+    )
 
+    special_map = _special_map_for_vocab(ordered_special_pairs, vocab_token_set)
+    haskey(special_map, :unk) || throw(ArgumentError("trained vocabulary dropped the required :unk token"))
+
+    vocab = build_vocab(vocab_tokens; special_tokens=special_map)
+    metadata = TokenizerMetadata(:bpe, config.model_name, v"0.3.0", :none)
+    tokenizer = BPETokenizer(vocab, pair_ranks, config.special_tokens[:unk], marker, metadata)
+    artifacts = BPETrainingArtifacts(copy(vocab_tokens), copy(merge_pairs))
+    return TrainingResult(tokenizer, config, artifacts)
+end
+
+function _char_bpe_sequences(
+    word_counts::Dict{String,Int},
+    marker::String,
+)::Tuple{Vector{Vector{String}},Vector{Int}}
     words = Vector{Vector{String}}()
     freqs = Int[]
-    symbol_set = Set{String}([marker])
 
     sorted_word_counts = collect(word_counts)
     sort!(sorted_word_counts; by = first)
 
     for (word, freq) in sorted_word_counts
-        symbols = _word_symbols(word, marker)
-        push!(words, symbols)
+        push!(words, _word_symbols(word, marker))
         push!(freqs, freq)
-        for symbol in symbols
-            push!(symbol_set, symbol)
-        end
     end
 
-    merges = Tuple{String,String}[]
-    while _effective_vocab_size(symbol_set, special_token_set, special_vocab_tokens) < config.vocab_size
-        pair_counts = _pair_frequencies(words, freqs)
-        best_pair, best_count = _best_pair(pair_counts)
-        best_pair === nothing && break
-        best_count < config.min_frequency && break
-
-        push!(merges, best_pair)
-        merged_symbol = best_pair[1] * best_pair[2]
-        push!(symbol_set, merged_symbol)
-        _merge_pair_in_place!(words, best_pair, merged_symbol)
-    end
-
-    non_special = [token for token in symbol_set if !(token in special_token_set) && !(token in required_non_special)]
-    sort!(non_special)
-
-    vocab_tokens = vcat(special_vocab_tokens, required_non_special, non_special)
-    if length(vocab_tokens) > config.vocab_size
-        resize!(vocab_tokens, config.vocab_size)
-    end
-
-    _ensure_required_tokens_present!(vocab_tokens, unique_required, config.vocab_size)
-
-    special_map = Dict{Symbol,String}()
-    for (symbol, token) in ordered_special_pairs
-        token in vocab_tokens && (special_map[symbol] = token)
-    end
-    haskey(special_map, :unk) || throw(ArgumentError("trained vocabulary dropped the required :unk token"))
-
-    vocab = build_vocab(vocab_tokens; special_tokens=special_map)
-    pair_ranks, kept_pairs = _pair_ranks_from_merges(vocab_tokens, merges)
-
-    metadata = TokenizerMetadata(:bpe, config.model_name, v"0.3.0", :none)
-    tokenizer = BPETokenizer(vocab, pair_ranks, config.special_tokens[:unk], marker, metadata)
-    artifacts = BPETrainingArtifacts(copy(vocab_tokens), kept_pairs)
-    return TrainingResult(tokenizer, config, artifacts)
+    return (words, freqs)
 end
 
 function _word_symbols(word::String, marker::String)::Vector{String}
@@ -80,16 +63,95 @@ function _word_symbols(word::String, marker::String)::Vector{String}
     return symbols
 end
 
-function _effective_vocab_size(
-    symbol_set::Set{String},
-    special_token_set::Set{String},
-    ordered_special::Vector{String},
-)::Int
-    non_special_count = 0
-    for symbol in symbol_set
-        symbol in special_token_set || (non_special_count += 1)
+function _required_non_special_tokens(
+    special_tokens::Dict{Symbol,String},
+    marker::String,
+)::Vector{String}
+    special_token_set = Set(values(special_tokens))
+    required = String[]
+    marker in special_token_set || push!(required, marker)
+    return required
+end
+
+function _base_alphabet_from_sequences(
+    words::Vector{Vector{String}};
+    marker::String,
+)::Vector{String}
+    symbol_set = Set{String}()
+    for symbols in words
+        for symbol in symbols
+            symbol == marker && continue
+            push!(symbol_set, symbol)
+        end
     end
-    return length(ordered_special) + non_special_count
+
+    base_alphabet = collect(symbol_set)
+    sort!(base_alphabet)
+    return base_alphabet
+end
+
+function _initialize_bpe_vocab_tokens(
+    special_vocab_tokens::Vector{String},
+    required_non_special::Vector{String},
+    base_alphabet::Vector{String},
+    vocab_size::Int,
+)::Tuple{Vector{String},Set{String}}
+    vocab_tokens = String[]
+    vocab_token_set = Set{String}()
+
+    for token in special_vocab_tokens
+        _push_unique_token!(vocab_tokens, vocab_token_set, token)
+    end
+    for token in required_non_special
+        _push_unique_token!(vocab_tokens, vocab_token_set, token)
+    end
+    for symbol in base_alphabet
+        _push_unique_token!(vocab_tokens, vocab_token_set, symbol)
+    end
+
+    _validate_required_vocab_capacity(vocab_size, vocab_tokens)
+    return (vocab_tokens, vocab_token_set)
+end
+
+function _run_merge_driven_training!(
+    words::Vector{Vector{String}},
+    freqs::Vector{Int},
+    vocab_tokens::Vector{String},
+    vocab_token_set::Set{String};
+    vocab_size::Int,
+    min_frequency::Int,
+)::Tuple{Vector{Tuple{String,String}},Dict{Tuple{String,String},Int}}
+    merges = Tuple{String,String}[]
+
+    while length(vocab_tokens) < vocab_size
+        pair_counts = _pair_frequencies(words, freqs)
+        best_pair, best_count = _best_pair(pair_counts)
+        best_pair === nothing && break
+        best_count < min_frequency && break
+
+        merged_symbol = best_pair[1] * best_pair[2]
+        _merge_pair_in_place!(words, best_pair, merged_symbol)
+        push!(merges, best_pair)
+        _push_unique_token!(vocab_tokens, vocab_token_set, merged_symbol)
+    end
+
+    pair_ranks = Dict{Tuple{String,String},Int}()
+    for (rank, pair) in enumerate(merges)
+        haskey(pair_ranks, pair) || (pair_ranks[pair] = rank)
+    end
+
+    return (merges, pair_ranks)
+end
+
+function _special_map_for_vocab(
+    ordered_special_pairs::Vector{Pair{Symbol,String}},
+    vocab_token_set::Set{String},
+)::Dict{Symbol,String}
+    special_map = Dict{Symbol,String}()
+    for (symbol, token) in ordered_special_pairs
+        token in vocab_token_set && (special_map[symbol] = token)
+    end
+    return special_map
 end
 
 function _pair_frequencies(
@@ -160,36 +222,4 @@ function _merge_pair_in_place!(
         words[i] = destination
     end
     return nothing
-end
-
-function _ensure_required_tokens_present!(
-    vocab_tokens::Vector{String},
-    required_tokens::Vector{String},
-    vocab_size::Int,
-)::Nothing
-    missing = [token for token in required_tokens if !(token in vocab_tokens)]
-    isempty(missing) || throw(ArgumentError(
-        "vocab_size=$vocab_size cannot keep required token(s): $(join(missing, ", "))",
-    ))
-    return nothing
-end
-
-function _pair_ranks_from_merges(
-    vocab_tokens::Vector{String},
-    merges::Vector{Tuple{String,String}},
-)::Tuple{Dict{Tuple{String,String},Int},Vector{Tuple{String,String}}}
-    vocab_token_set = Set(vocab_tokens)
-    pair_ranks = Dict{Tuple{String,String},Int}()
-    kept_pairs = Tuple{String,String}[]
-    rank = 1
-
-    for pair in merges
-        merged = pair[1] * pair[2]
-        merged in vocab_token_set || continue
-        pair_ranks[pair] = rank
-        push!(kept_pairs, pair)
-        rank += 1
-    end
-
-    return (pair_ranks, kept_pairs)
 end
