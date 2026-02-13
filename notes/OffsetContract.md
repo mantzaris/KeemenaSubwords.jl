@@ -47,6 +47,8 @@ Programmatic helpers:
 - `offsets_span_style() == :half_open`
 - `offsets_sentinel() == (0, 0)`
 - `has_span(offset)` is true iff `offset != (0, 0)`
+- `has_nonempty_span(offset)` is true iff the offset is spanful and `stop > start`
+- `span_ncodeunits(offset)` returns span length in codeunits (`0` for sentinel/empty)
 
 ## Sentinel and Special Tokens
 
@@ -82,3 +84,25 @@ KeemenaPreprocessing should:
 5. Ignore sentinel offsets `(0, 0)` during span alignment.
 6. Do not drop all `mask==1` tokens blindly; present-in-text special tokens may
    have real spans.
+
+Recommended span participation policy:
+
+- Participate in span alignment iff `has_nonempty_span(offset)`.
+
+## Downstream-Safe Span Inspection
+
+Offsets are codeunit spans. Do not assume they are always valid Julia string
+slicing boundaries, especially for byte-level tokenizers on multibyte text.
+
+Use these helpers for robust downstream handling:
+
+- `span_codeunits(text, offset)`:
+  - returns `UInt8[]` for sentinel/empty spans,
+  - returns the exact byte slice for non-empty spans.
+- `try_span_substring(text, offset)`:
+  - returns `""` for sentinel/empty spans,
+  - returns `String` only when both boundaries are valid Julia string boundaries,
+  - returns `nothing` otherwise.
+- `is_valid_string_boundary(text, idx)` can be used to inspect boundary validity.
+- `offsets_are_nonoverlapping(offsets; ignore_sentinel=true, ignore_empty=true)`
+  validates a downstream non-overlap invariant.

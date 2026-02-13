@@ -1,96 +1,81 @@
-# KeemenaSubwords normalization/offsets contract progress
+# KeemenaSubwords Plan Progress
 
-## Completed
+## Iteration 23: Offsets robustness and downstream-safe span utilities
 
-1. Public tokenizer intrinsic normalization API
-- Added `normalize(tokenizer::AbstractSubwordTokenizer, text)::String` (identity by default).
-- Added HF specialization so `normalize(::HuggingFaceJSONTokenizer, text)` applies tokenizer.json normalizer pipeline.
-- Added integration helpers:
-  - `tokenization_view(tokenizer, clean_text)`
-  - `requires_tokenizer_normalization(tokenizer)`
-  - `offsets_coordinate_system()` -> `:utf8_codeunits`
+### Summary
+- Added downstream-safe span helper APIs without changing the existing offset contract.
+- Added regression tests for empty vs sentinel vs non-empty span participation, non-overlap checks, and byte-level multibyte safety.
+- Updated canonical contract docs with explicit guidance for downstream consumers (especially KeemenaPreprocessing) on safe span handling.
 
-2. Tokenization bypass switch in structured encode
-- Extended `encode_result(...; assume_normalized::Bool=false, ...)`.
-- Contract behavior implemented:
-  - `assume_normalized=true` skips intrinsic normalization during encoding.
-  - HF encode path now supports `assume_normalized=true` and bypasses normalizer.
+### Code changes
 
-3. Offsets + masks invariants hardening
-- `TokenizationResult` docs now define:
-  - UTF-8 codeunit offsets
-  - half-open `[start, stop)` spans
-  - special-token sentinel `(0, 0)` with `special_tokens_mask == 1`
-- `encode_result` metadata now records:
-  - `assume_normalized`
-  - `offsets_coordinates`
-  - `offsets_reference`
-- Added offsets support in structured outputs for:
-  - WordPiece
-  - BPE
-  - ByteBPE
-  - Unigram TSV
-  - SentencePiece wrapper
-  - tiktoken
-  - HF tokenizer.json (supported pretokenizer paths including whitespace, byte-level prefix-space, and metaspace contract fixtures)
+1. `src/normalization.jl`
+- Added and documented:
+  - `has_nonempty_span(offset::Tuple{Int,Int})::Bool`
+  - `span_ncodeunits(offset::Tuple{Int,Int})::Int`
+  - `span_codeunits(text::AbstractString, offset::Tuple{Int,Int})::Vector{UInt8}`
+  - `is_valid_string_boundary(text::AbstractString, idx::Int)::Bool`
+  - `try_span_substring(text::AbstractString, offset::Tuple{Int,Int})::Union{Nothing,String}`
+  - `offsets_are_nonoverlapping(offsets::Vector{Tuple{Int,Int}}; ignore_sentinel::Bool=true, ignore_empty::Bool=true)::Bool`
+- Behavior guarantees:
+  - sentinel `(0,0)` and empty spans remain non-participating for `has_nonempty_span`.
+  - `try_span_substring` is non-throwing and returns:
+    - `""` for sentinel/empty spans,
+    - `String` when boundaries are valid,
+    - `nothing` when boundaries are not valid.
+  - `span_codeunits` returns exact byte slices for non-empty spans and `UInt8[]` for sentinel/empty.
 
-4. Documentation
-- Added dedicated docs page:
-  - `docs/src/normalization_offsets_contract.md`
-- Updated docs navigation and references:
-  - `docs/make.jl`
-  - `docs/src/index.md`
-  - `docs/src/integration.md`
-  - `docs/src/loading.md`
-  - `docs/src/api.md`
+2. `src/KeemenaSubwords.jl`
+- Exported new helpers:
+  - `has_nonempty_span`
+  - `span_ncodeunits`
+  - `span_codeunits`
+  - `is_valid_string_boundary`
+  - `try_span_substring`
+  - `offsets_are_nonoverlapping`
 
-5. Regression tests for contract
-- Updated structured output expectations for HF offsets/masks in `test/runtests.jl`.
-- Added new contract test section covering:
-  - normalization bypass equivalence (`normalize` + `assume_normalized=true`)
-  - offsets monotonicity/bounds on normalized text
-  - TemplateProcessing special mask + sentinel offsets
-  - family smoke coverage for `assume_normalized=true` + offsets/masks
+3. `test/runtests.jl`
+- Added new testset:
+  - `Section 23 offsets robustness and downstream-safe span utilities`
+- Coverage added:
+  - helper semantics for sentinel/empty/non-empty offsets
+  - boundary validity checks (`is_valid_string_boundary`)
+  - non-throwing behavior for `try_span_substring`
+  - overlap regression checks using `offsets_are_nonoverlapping` across representative families:
+    - WordPiece
+    - SentencePiece Unigram
+    - HF tokenizer.json WordPiece fixture
+    - classic BPE
+    - ByteBPE
+    - tiktoken fixture
+  - multibyte byte-level safety checks on:
+    - `"cafe\u0301"`
+    - `"é"`
+    - `"🙂"`
+    - `"a🙂b"`
+  - for ByteBPE and HF ByteLevel fixture:
+    - `span_codeunits` length equals `stop - start` for non-empty spans,
+    - `try_span_substring` never throws,
+    - when `try_span_substring` returns `String`, its codeunits match `span_codeunits`.
 
-## Validation executed
+4. `notes/OffsetContract.md`
+- Added explicit downstream-safe section:
+  - offsets are codeunit spans and may not always be valid Julia string slicing boundaries.
+  - recommended alignment participation rule:
+    - participate iff `has_nonempty_span(offset)`.
+  - documented safe inspection helpers:
+    - `span_codeunits`
+    - `try_span_substring`
+    - `is_valid_string_boundary`
+    - `offsets_are_nonoverlapping`
 
+5. `docs/src/normalization_offsets_contract.md`
+- Synced from canonical notes via sync tool.
+
+6. `docs/src/api.md`
+- Added new helper APIs to public API surface list.
+
+### Validation
 - `julia --project=. -e 'using Pkg; Pkg.test()'` -> pass
-- `julia --project=docs docs/make.jl` -> pass
-
-## Iteration 22
-
-- Added and exported explicit offset convention helpers:
-  - `offsets_index_base() == 1`
-  - `offsets_span_style() == :half_open`
-  - `offsets_sentinel() == (0, 0)`
-  - `has_span(offset)`
-- Kept `offsets_coordinate_system() == :utf8_codeunits` and updated internal
-  sentinel injection to use `offsets_sentinel()`.
-- Hardened HF special-token semantics:
-  - introduced HF-specific special-token masking that includes tokenizer-defined
-    special ids (including special added tokens),
-  - added HF span-aware segmentation for offsets so present-in-text added tokens
-    retain real spans while inserted template specials keep sentinel spans.
-- Added fixture `test/fixtures/hf_json_special_spans/tokenizer.json` and tests
-  proving:
-  - inserted specials -> mask 1 + sentinel `(0, 0)`,
-  - present-in-text special added token -> mask 1 + real span.
-- Reworked Section 22 tests in `test/runtests.jl`:
-  - explicit helper API assertions,
-  - cross-family bounds/sentinel/monotonicity checks,
-  - 1-based regression guard (`start == 1`),
-  - dedicated ByteLevel whitespace-sensitive invariants.
-- Established canonical contract source and drift prevention:
-  - canonical file: `notes/OffsetContract.md`,
-  - compatibility pointer retained at `notes/OffesetContract.md`,
-  - new sync/check tool: `tools/sync_offset_contract.jl`,
-  - CI check added: `.github/workflows/CI.yml` runs
-    `julia --project=. tools/sync_offset_contract.jl --check`.
-- Synced docs contract page from canonical notes source and updated docs/API text
-  to explicitly state 1-based bounds, sentinel meaning, and alignment rules.
-
-### Iteration 22 validation
-
-- `julia --project=. -e "using Pkg; Pkg.test()"` -> pass
 - `julia --project=docs docs/make.jl` -> pass
 - `julia --project=. tools/sync_offset_contract.jl --check` -> pass

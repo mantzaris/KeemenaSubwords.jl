@@ -21,6 +21,8 @@ Structured encoding and file-spec APIs are also part of the public surface:
 `TokenizationResult`, `FilesSpec`, `normalize`, `tokenization_view`,
 `requires_tokenizer_normalization`, `offsets_coordinate_system`,
 `offsets_index_base`, `offsets_span_style`, `offsets_sentinel`, `has_span`,
+`has_nonempty_span`, `span_ncodeunits`, `span_codeunits`,
+`is_valid_string_boundary`, `try_span_substring`, `offsets_are_nonoverlapping`,
 `encode_result`, `encode_batch_result`.
 
 ## Registry and Installation APIs

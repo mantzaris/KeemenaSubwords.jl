@@ -68,3 +68,110 @@ offsets_sentinel()::Tuple{Int,Int} = (0, 0)
 Return `true` when an offset carries a real source-text span.
 """
 has_span(offset::Tuple{Int,Int})::Bool = offset != offsets_sentinel()
+
+"""
+Return `true` when an offset carries a non-empty source-text span.
+"""
+has_nonempty_span(offset::Tuple{Int,Int})::Bool = has_span(offset) && offset[2] > offset[1]
+
+"""
+Return span length measured in UTF-8 codeunits.
+
+Sentinel and empty spans return `0`.
+"""
+function span_ncodeunits(offset::Tuple{Int,Int})::Int
+    has_span(offset) || return 0
+    start_idx, stop_idx = offset
+    return max(0, stop_idx - start_idx)
+end
+
+"""
+Return the offset span as UTF-8 codeunits.
+
+Sentinel and empty spans return `UInt8[]`. Invalid or out-of-bounds spans also
+return `UInt8[]` to keep this helper non-throwing for downstream inspection.
+"""
+function span_codeunits(
+    text::AbstractString,
+    offset::Tuple{Int,Int},
+)::Vector{UInt8}
+    has_nonempty_span(offset) || return UInt8[]
+    start_idx, stop_idx = offset
+    max_stop = ncodeunits(text) + offsets_index_base()
+    if start_idx < offsets_index_base() || stop_idx > max_stop || stop_idx <= start_idx
+        return UInt8[]
+    end
+    return Vector{UInt8}(codeunits(text)[start_idx:(stop_idx - 1)])
+end
+
+"""
+Return whether `idx` is a valid Julia string boundary for `text`.
+
+This includes the exclusive end boundary `ncodeunits(text) + 1`.
+"""
+function is_valid_string_boundary(
+    text::AbstractString,
+    idx::Int,
+)::Bool
+    idx >= offsets_index_base() || return false
+    end_idx = ncodeunits(text) + offsets_index_base()
+    idx <= end_idx || return false
+    return idx == end_idx || isvalid(text, idx)
+end
+
+"""
+Attempt to return a substring for a half-open codeunit span `[start, stop)`.
+
+Sentinel and empty spans return `""`. If span boundaries are not valid Julia
+string boundaries, this returns `nothing`. This helper never throws.
+"""
+function try_span_substring(
+    text::AbstractString,
+    offset::Tuple{Int,Int},
+)::Union{Nothing,String}
+    try
+        has_span(offset) || return ""
+        start_idx, stop_idx = offset
+        stop_idx > start_idx || return ""
+        is_valid_string_boundary(text, start_idx) || return nothing
+        is_valid_string_boundary(text, stop_idx) || return nothing
+        return String(SubString(text, start_idx, prevind(text, stop_idx)))
+    catch
+        return nothing
+    end
+end
+
+"""
+Return whether participating offsets are non-overlapping in sequence order.
+
+Participating offsets satisfy:
+- not sentinel when `ignore_sentinel=true`
+- not empty when `ignore_empty=true`
+
+For participating offsets, this enforces `next.start >= prev.stop`.
+"""
+function offsets_are_nonoverlapping(
+    offsets::Vector{Tuple{Int,Int}};
+    ignore_sentinel::Bool=true,
+    ignore_empty::Bool=true,
+)::Bool
+    prev_stop = nothing
+    for offset in offsets
+        if !has_span(offset)
+            ignore_sentinel && continue
+            return false
+        end
+
+        start_idx, stop_idx = offset
+        stop_idx >= start_idx || return false
+        if stop_idx == start_idx && ignore_empty
+            continue
+        end
+
+        if prev_stop !== nothing && start_idx < prev_stop
+            return false
+        end
+        prev_stop = stop_idx
+    end
+    return true
+end

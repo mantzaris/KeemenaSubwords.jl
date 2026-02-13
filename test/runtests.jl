@@ -999,6 +999,178 @@ end
         end
     end
 
+    @testset "Section 23 offsets robustness and downstream-safe span utilities" begin
+        @testset "Helper semantics: sentinel, empty, non-empty" begin
+            sentinel = offsets_sentinel()
+            @test !has_span(sentinel)
+            @test !has_nonempty_span(sentinel)
+
+            empty = (1, 1)
+            @test has_span(empty)
+            @test !has_nonempty_span(empty)
+
+            nonempty = (1, 2)
+            @test has_span(nonempty)
+            @test has_nonempty_span(nonempty)
+
+            @test span_ncodeunits(sentinel) == 0
+            @test span_ncodeunits(empty) == 0
+            @test span_ncodeunits(nonempty) == 1
+
+            @test span_codeunits("hello", sentinel) == UInt8[]
+            @test span_codeunits("hello", empty) == UInt8[]
+            @test span_codeunits("hello", (1, 3)) == Vector{UInt8}(codeunits("he"))
+
+            sample = "a🙂b"
+            @test is_valid_string_boundary(sample, 1)
+            @test is_valid_string_boundary(sample, 2)
+            @test is_valid_string_boundary(sample, ncodeunits(sample) + 1)
+            @test !is_valid_string_boundary(sample, 0)
+            @test !is_valid_string_boundary(sample, 3)
+            @test !is_valid_string_boundary(sample, ncodeunits(sample) + 2)
+
+            @test_nowarn try_span_substring(sample, sentinel)
+            @test_nowarn try_span_substring(sample, empty)
+            @test_nowarn try_span_substring(sample, (2, 6))
+            @test_nowarn try_span_substring(sample, (3, 6))
+            @test try_span_substring(sample, sentinel) == ""
+            @test try_span_substring(sample, empty) == ""
+            @test try_span_substring(sample, (1, 2)) == "a"
+            @test try_span_substring(sample, (2, 6)) == "🙂"
+            @test try_span_substring(sample, (3, 6)) === nothing
+        end
+
+        @testset "Helper semantics: non-overlap predicate" begin
+            @test offsets_are_nonoverlapping([(1, 2), (2, 3), (3, 3), (3, 4)])
+            @test !offsets_are_nonoverlapping([(1, 3), (2, 4)])
+            @test offsets_are_nonoverlapping([(0, 0), (1, 2), (2, 2), (2, 3)])
+            @test !offsets_are_nonoverlapping([(0, 0), (1, 2)]; ignore_sentinel=false)
+        end
+
+        @testset "Tokenizer non-overlap regression checks" begin
+            cases = (
+                (
+                    label="wordpiece",
+                    tokenizer=load_wordpiece(fixture("wordpiece", "vocab.txt")),
+                    text="hello world",
+                    add_special=true,
+                ),
+                (
+                    label="sentencepiece_unigram",
+                    tokenizer=load_sentencepiece(model_path(:core_sentencepiece_unigram_en)),
+                    text="hello world",
+                    add_special=true,
+                ),
+                (
+                    label="hf_wordpiece_json",
+                    tokenizer=load_hf_tokenizer_json(fixture("hf_json_wordpiece", "tokenizer.json")),
+                    text="hello world",
+                    add_special=true,
+                ),
+                (
+                    label="classic_bpe",
+                    tokenizer=load_tokenizer(:core_bpe_en),
+                    text="hello world",
+                    add_special=true,
+                ),
+                (
+                    label="bytebpe",
+                    tokenizer=load_bpe_gpt2(fixture("bpe_gpt2", "vocab.json"), fixture("bpe_gpt2", "merges.txt")),
+                    text="hello world",
+                    add_special=true,
+                ),
+                (
+                    label="tiktoken",
+                    tokenizer=load_tiktoken(fixture("tiktoken_model", "tokenizer.model")),
+                    text="hi hello",
+                    add_special=false,
+                ),
+            )
+
+            for case in cases
+                @testset "$(case.label)" begin
+                    normalized = normalize(case.tokenizer, case.text)
+                    result = encode_result(
+                        case.tokenizer,
+                        normalized;
+                        add_special_tokens=case.add_special,
+                        assume_normalized=true,
+                        return_offsets=true,
+                        return_masks=true,
+                    )
+
+                    @test result.offsets !== nothing
+                    _assert_offset_contract(normalized, result.offsets)
+                    @test offsets_are_nonoverlapping(
+                        result.offsets;
+                        ignore_sentinel=true,
+                        ignore_empty=true,
+                    )
+                end
+            end
+        end
+
+        @testset "Byte-level multibyte safety helpers" begin
+            tokenizers = (
+                (
+                    label="bytebpe",
+                    tokenizer=load_bpe_gpt2(fixture("bpe_gpt2", "vocab.json"), fixture("bpe_gpt2", "merges.txt")),
+                ),
+                (
+                    label="hf_bytelevel",
+                    tokenizer=load_hf_tokenizer_json(fixture("hf_json_bytelevel_bpe", "tokenizer.json")),
+                ),
+            )
+            texts = ["cafe\u0301", "é", "🙂", "a🙂b"]
+
+            for spec in tokenizers
+                @testset "$(spec.label)" begin
+                    for text in texts
+                        normalized = normalize(spec.tokenizer, text)
+                        result = encode_result(
+                            spec.tokenizer,
+                            normalized;
+                            assume_normalized=true,
+                            add_special_tokens=false,
+                            return_offsets=true,
+                            return_masks=true,
+                        )
+
+                        @test result.offsets !== nothing
+                        _assert_offset_contract(normalized, result.offsets)
+                        @test offsets_are_nonoverlapping(
+                            result.offsets;
+                            ignore_sentinel=true,
+                            ignore_empty=true,
+                        )
+
+                        for offset in result.offsets
+                            @test_nowarn try_span_substring(normalized, offset)
+                            sub = try_span_substring(normalized, offset)
+                            bytes = span_codeunits(normalized, offset)
+
+                            if has_nonempty_span(offset)
+                                @test length(bytes) == span_ncodeunits(offset)
+                            else
+                                @test isempty(bytes)
+                                @test sub == ""
+                            end
+
+                            if sub === nothing
+                                start_idx, stop_idx = offset
+                                @test has_nonempty_span(offset)
+                                @test !is_valid_string_boundary(normalized, start_idx) ||
+                                    !is_valid_string_boundary(normalized, stop_idx)
+                            else
+                                @test Vector{UInt8}(codeunits(sub)) == bytes
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
     include("e2e_user_workflows.jl")
     include("e2e_user_workflows_extended.jl")
     include("test_goldens.jl")
