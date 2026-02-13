@@ -14,9 +14,7 @@ include("huggingface_json/hf_json_types.jl")
 include("huggingface_json/hf_json_parse.jl")
 include("huggingface_json/hf_json_pipeline.jl")
 include("huggingface_json/hf_json_loader.jl")
-include("training.jl")
-include("bpe_train.jl")
-include("unigram_train.jl")
+include("training/training.jl")
 include("io.jl")
 
 export AbstractSubwordTokenizer,
@@ -96,6 +94,7 @@ export AbstractSubwordTokenizer,
        train_bpe,
        train_unigram,
        train_wordpiece,
+       train_sentencepiece,
        save_tokenizer,
        export_tokenizer
 

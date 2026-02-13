@@ -115,10 +115,30 @@ function train_wordpiece(
     special_tokens::Dict{Symbol,String}=Dict(:unk => "[UNK]", :pad => "[PAD]"),
     continuation_prefix::String="##",
 )::WordPieceTokenizer
-    _ = corpus
-    _ = vocab_size
-    _ = min_frequency
-    _ = special_tokens
-    _ = continuation_prefix
-    throw(ArgumentError("train_wordpiece is not implemented yet. Use load_tokenizer(...) with an existing model for now."))
+    return _train_wordpiece_impl(
+        corpus;
+        vocab_size=vocab_size,
+        min_frequency=min_frequency,
+        special_tokens=special_tokens,
+        continuation_prefix=continuation_prefix,
+    )
+end
+
+"""
+Optional SentencePiece training entry point.
+
+This API is reserved for a later iteration.
+"""
+function train_sentencepiece(
+    corpus;
+    vocab_size::Int,
+    model_type::Symbol=:unigram,
+    special_tokens::Dict{Symbol,String}=Dict(:unk => "<unk>", :pad => "<pad>"),
+)::SentencePieceTokenizer
+    return _train_sentencepiece_impl(
+        corpus;
+        vocab_size=vocab_size,
+        model_type=model_type,
+        special_tokens=special_tokens,
+    )
 end

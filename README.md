@@ -45,6 +45,7 @@ _Generated from registry metadata via `tools/sync_readme_models.jl`._
 ## Documentation
 
 - [Models](https://mantzaris.github.io/KeemenaSubwords.jl/dev/models/)
+- [Training (Experimental)](https://mantzaris.github.io/KeemenaSubwords.jl/dev/training/)
 - [Formats and Required Files](https://mantzaris.github.io/KeemenaSubwords.jl/dev/formats/)
 - [Loading Tokenizers From Local Paths](https://mantzaris.github.io/KeemenaSubwords.jl/dev/loading_local/)
 - [LLM Cookbook](https://mantzaris.github.io/KeemenaSubwords.jl/dev/llm_cookbook/)

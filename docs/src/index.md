@@ -50,6 +50,7 @@ install_model!(:llama3_8b_tokenizer; token=ENV["HF_TOKEN"])
 
 - [Built-in model inventory](models.md)
 - [Normalization and offsets contract](normalization_offsets_contract.md)
+- [Training (experimental)](training.md)
 - [Format contracts](formats.md)
 - [Local path recipes](loading_local.md)
 - [LLM cookbook and tokenizer.json roadmap](llm_cookbook.md)
