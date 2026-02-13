@@ -1,18 +1,20 @@
 @testset "BPE training end-to-end" begin
     corpus = [
-        "hello world hello world",
-        "tokenizers train subwords",
-        "subwords train tokenizers",
-        "offset checks stay stable",
-        "stable deterministic merges",
+        "hello, world!",
+        "tokenizers train subwords quickly",
+        "prices [usd] are 12.50",
+        "café costs €5",
+        "emoji 😀 party",
+        "brackets (x) [y] {z}",
     ]
 
     config_kwargs = (
-        vocab_size=80,
+        vocab_size=128,
         min_frequency=1,
         special_tokens=Dict(:unk => "<UNK>", :pad => "<PAD>"),
         end_of_word_marker="</w>",
         model_name="training_e2e_bpe",
+        version=v"0.3.0",
     )
 
     training = train_bpe_result(corpus; config_kwargs...)
@@ -21,11 +23,19 @@
     @test vocab_size(tokenizer) <= config_kwargs.vocab_size
     @test training.config.model_name == "training_e2e_bpe"
     @test training.artifacts.vocab_tokens == tokenizer.vocab.id_to_token
+    @test training.artifacts.pair_ranks == tokenizer.pair_ranks
+
+    vocab_token_set = Set(training.artifacts.vocab_tokens)
+    for (rank, pair) in enumerate(training.artifacts.merge_pairs)
+        @test training.artifacts.pair_ranks[pair] == rank
+        @test pair[1] * pair[2] in vocab_token_set
+    end
 
     samples = [
-        "hello world",
-        "tokenizers train subwords",
-        "stable deterministic merges",
+        "hello, world!",
+        "prices [usd] are 12.50",
+        "café costs €5",
+        "emoji 😀 party",
     ]
 
     for text in samples
@@ -47,4 +57,10 @@
     second = train_bpe_result(corpus; config_kwargs...)
     @test second.artifacts.vocab_tokens == training.artifacts.vocab_tokens
     @test second.artifacts.merge_pairs == training.artifacts.merge_pairs
+    @test second.artifacts.pair_ranks == training.artifacts.pair_ranks
+
+    reversed_training = train_bpe_result(reverse(corpus); config_kwargs...)
+    @test reversed_training.artifacts.vocab_tokens == training.artifacts.vocab_tokens
+    @test reversed_training.artifacts.merge_pairs == training.artifacts.merge_pairs
+    @test reversed_training.artifacts.pair_ranks == training.artifacts.pair_ranks
 end

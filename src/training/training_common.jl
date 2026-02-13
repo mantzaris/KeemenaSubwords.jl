@@ -40,7 +40,6 @@ function _normalize_special_tokens(
         normalized[canonical] = token_string
     end
 
-    haskey(normalized, :unk) || (normalized[:unk] = "<UNK>")
     return normalized
 end
 

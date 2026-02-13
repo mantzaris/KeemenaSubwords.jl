@@ -33,9 +33,14 @@ function _train_bpe_result_impl(
     haskey(special_map, :unk) || throw(ArgumentError("trained vocabulary dropped the required :unk token"))
 
     vocab = build_vocab(vocab_tokens; special_tokens=special_map)
-    metadata = TokenizerMetadata(:bpe, config.model_name, v"0.3.0", :none)
+    metadata = TokenizerMetadata(:bpe, config.model_name, config.version, :none)
     tokenizer = BPETokenizer(vocab, pair_ranks, config.special_tokens[:unk], marker, metadata)
-    artifacts = BPETrainingArtifacts(copy(vocab_tokens), copy(merge_pairs))
+    artifacts = BPETrainingArtifacts(
+        copy(vocab_tokens),
+        copy(merge_pairs),
+        copy(pair_ranks),
+        copy(word_counts),
+    )
     return TrainingResult(tokenizer, config, artifacts)
 end
 

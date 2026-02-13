@@ -14,11 +14,14 @@ struct BPETrainingConfig <: AbstractTrainingConfig
     pretokenizer::Union{Nothing,Function}
     end_of_word_marker::String
     model_name::String
+    version::VersionNumber
 end
 
 struct BPETrainingArtifacts <: AbstractTrainingArtifacts
     vocab_tokens::Vector{String}
     merge_pairs::Vector{Tuple{String,String}}
+    pair_ranks::Dict{Tuple{String,String},Int}
+    word_counts::Dict{String,Int}
 end
 
 struct ByteBPETrainingConfig <: AbstractTrainingConfig

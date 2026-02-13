@@ -9,6 +9,7 @@ function train_bpe(
     pretokenizer::Union{Nothing,Function}=nothing,
     end_of_word_marker::String="</w>",
     model_name::String="trained_bpe",
+    version::VersionNumber=v"0.3.0",
 )::BPETokenizer
     return train_bpe_result(
         corpus;
@@ -18,6 +19,7 @@ function train_bpe(
         pretokenizer=pretokenizer,
         end_of_word_marker=end_of_word_marker,
         model_name=model_name,
+        version=version,
     ).tokenizer
 end
 
@@ -32,6 +34,7 @@ function train_bpe_result(
     pretokenizer::Union{Nothing,Function}=nothing,
     end_of_word_marker::String="</w>",
     model_name::String="trained_bpe",
+    version::VersionNumber=v"0.3.0",
 )::TrainingResult{BPETokenizer,BPETrainingConfig,BPETrainingArtifacts}
     config = BPETrainingConfig(
         vocab_size,
@@ -40,6 +43,7 @@ function train_bpe_result(
         pretokenizer,
         String(end_of_word_marker),
         String(model_name),
+        version,
     )
     return _train_bpe_result_impl(corpus, config)
 end
