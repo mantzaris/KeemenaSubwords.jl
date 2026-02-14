@@ -40,6 +40,9 @@ tok = PreTrainedTokenizerFast(tokenizer_file="out_dir/tokenizer.json")
 
 Current scope note:
 - `tokenizer_config.json` and `special_tokens_map.json` are not emitted yet.
+- `TemplateProcessing` is emitted in canonical HF JSON shape (`single`/`pair`
+  object items and object-map `special_tokens`) for better external HF
+  compatibility.
 
 ## Detection Notes
 

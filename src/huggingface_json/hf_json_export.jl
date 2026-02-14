@@ -256,19 +256,15 @@ function _hf_export_postprocessor(post::HFRobertaProcessingPostProcessor)
 end
 
 function _hf_export_postprocessor(post::HFTemplateProcessingPostProcessor)
-    special_entries = Any[]
     pairs = collect(post.special_tokens)
     sort!(pairs; by=entry -> (entry[2], entry[1]))
-
-    for (token, id) in pairs
-        push!(special_entries, _hf_export_template_special_entry(token, id))
-    end
+    ordered_entries = Tuple{String,Int}[(String(token), id) for (token, id) in pairs]
 
     return Dict(
         "type" => "TemplateProcessing",
-        "single" => Any[post.single...],
-        "pair" => Any[post.pair...],
-        "special_tokens" => special_entries,
+        "single" => _hf_export_template_items(post.single; is_pair=false),
+        "pair" => _hf_export_template_items(post.pair; is_pair=true),
+        "special_tokens" => _hf_export_template_special_map(ordered_entries),
     )
 end
 
@@ -288,9 +284,9 @@ function _hf_export_bos_eos_postprocessor(tokenizer::AbstractSubwordTokenizer)
         return nothing
     end
 
-    single = Any[]
-    pair = Any[]
-    special_entries = Any[]
+    single = String[]
+    pair = String[]
+    special_entries = Tuple{String,Int}[]
     seen_ids = Set{Int}()
 
     if bos_id !== nothing
@@ -298,7 +294,7 @@ function _hf_export_bos_eos_postprocessor(tokenizer::AbstractSubwordTokenizer)
         push!(single, bos_token)
         push!(pair, bos_token)
         if bos_id ∉ seen_ids
-            push!(special_entries, _hf_export_template_special_entry(bos_token, bos_id))
+            push!(special_entries, (bos_token, bos_id))
             push!(seen_ids, bos_id)
         end
     end
@@ -311,7 +307,7 @@ function _hf_export_bos_eos_postprocessor(tokenizer::AbstractSubwordTokenizer)
         push!(single, eos_token)
         push!(pair, eos_token)
         if eos_id ∉ seen_ids
-            push!(special_entries, _hf_export_template_special_entry(eos_token, eos_id))
+            push!(special_entries, (eos_token, eos_id))
             push!(seen_ids, eos_id)
         end
     end
@@ -323,9 +319,9 @@ function _hf_export_bos_eos_postprocessor(tokenizer::AbstractSubwordTokenizer)
 
     return Dict(
         "type" => "TemplateProcessing",
-        "single" => single,
-        "pair" => pair,
-        "special_tokens" => special_entries,
+        "single" => _hf_export_template_items(single; is_pair=false),
+        "pair" => _hf_export_template_items(pair; is_pair=true),
+        "special_tokens" => _hf_export_template_special_map(special_entries),
     )
 end
 
@@ -335,6 +331,55 @@ function _hf_export_template_special_entry(token::String, id::Int)::Dict{String,
         "ids" => Any[id - 1],
         "tokens" => Any[token],
     )
+end
+
+function _hf_export_template_items(
+    items::Vector{String};
+    is_pair::Bool,
+)::Vector{Any}
+    exported = Any[]
+    current_type_id = 0
+
+    for item in items
+        if item == "\$A"
+            push!(exported, Dict(
+                "Sequence" => Dict(
+                    "id" => "A",
+                    "type_id" => 0,
+                ),
+            ))
+            continue
+        elseif item == "\$B"
+            current_type_id = 1
+            push!(exported, Dict(
+                "Sequence" => Dict(
+                    "id" => "B",
+                    "type_id" => 1,
+                ),
+            ))
+            continue
+        end
+
+        type_id = is_pair ? current_type_id : 0
+        push!(exported, Dict(
+            "SpecialToken" => Dict(
+                "id" => item,
+                "type_id" => type_id,
+            ),
+        ))
+    end
+
+    return exported
+end
+
+function _hf_export_template_special_map(
+    entries::Vector{Tuple{String,Int}},
+)::Dict{String,Any}
+    special_map = Dict{String,Any}()
+    for (token, id) in entries
+        special_map[token] = _hf_export_template_special_entry(token, id)
+    end
+    return special_map
 end
 
 _hf_export_decoder(tokenizer::HuggingFaceJSONTokenizer) = _hf_export_decoder(tokenizer.decoder)

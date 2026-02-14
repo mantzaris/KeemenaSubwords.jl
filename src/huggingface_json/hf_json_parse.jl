@@ -297,29 +297,54 @@ end
 
 function _parse_template_special_tokens(tokens_any, path::String)::Dict{String,Int}
     tokens_any === nothing && return Dict{String,Int}()
-    _json_is_array(tokens_any) || throw(ArgumentError("Template special_tokens must be an array at $path"))
-
     result = Dict{String,Int}()
-    for (i, entry) in enumerate(tokens_any)
-        entry_path = "$path[$i]"
-        _json_is_object(entry) || throw(ArgumentError("Template special_tokens entry must be an object at $entry_path"))
-        token_name = if _json_haskey(entry, "id")
-            _json_get_required_string(entry, "id", "$entry_path.id")
-        elseif _json_haskey(entry, "tokens")
-            tokens = _json_get_required(entry, "tokens", "$entry_path.tokens")
-            _json_is_array(tokens) && !isempty(tokens) || throw(ArgumentError("Template tokens array empty at $entry_path.tokens"))
-            String(tokens[1])
-        else
-            throw(ArgumentError("Template special token entry missing token id at $entry_path"))
+    if _json_is_array(tokens_any)
+        for (i, entry) in enumerate(tokens_any)
+            entry_path = "$path[$i]"
+            token_name, token_id = _parse_template_special_token_entry(entry, entry_path)
+            result[token_name] = token_id
         end
-
-        ids_any = _json_get_required(entry, "ids", "$entry_path.ids")
-        _json_is_array(ids_any) && !isempty(ids_any) || throw(ArgumentError("Template special token ids must be non-empty array at $entry_path.ids"))
-        token_id_zero = _as_int(ids_any[1], "$entry_path.ids[1]")
-        result[token_name] = token_id_zero + 1
+        return result
+    elseif _json_is_object(tokens_any)
+        for (entry_key_any, entry) in tokens_any
+            entry_key = String(entry_key_any)
+            entry_path = "$path.$entry_key"
+            token_name, token_id = _parse_template_special_token_entry(
+                entry,
+                entry_path;
+                fallback_token=entry_key,
+            )
+            result[token_name] = token_id
+        end
+        return result
     end
 
-    return result
+    throw(ArgumentError("Template special_tokens must be an array or object at $path"))
+end
+
+function _parse_template_special_token_entry(
+    entry,
+    entry_path::String;
+    fallback_token::Union{Nothing,String}=nothing,
+)::Tuple{String,Int}
+    _json_is_object(entry) || throw(ArgumentError("Template special_tokens entry must be an object at $entry_path"))
+
+    token_name = if _json_haskey(entry, "id")
+        _json_get_required_string(entry, "id", "$entry_path.id")
+    elseif _json_haskey(entry, "tokens")
+        tokens = _json_get_required(entry, "tokens", "$entry_path.tokens")
+        _json_is_array(tokens) && !isempty(tokens) || throw(ArgumentError("Template tokens array empty at $entry_path.tokens"))
+        String(tokens[1])
+    elseif fallback_token !== nothing
+        fallback_token
+    else
+        throw(ArgumentError("Template special token entry missing token id at $entry_path"))
+    end
+
+    ids_any = _json_get_required(entry, "ids", "$entry_path.ids")
+    _json_is_array(ids_any) && !isempty(ids_any) || throw(ArgumentError("Template special token ids must be non-empty array at $entry_path.ids"))
+    token_id_zero = _as_int(ids_any[1], "$entry_path.ids[1]")
+    return (token_name, token_id_zero + 1)
 end
 
 function _parse_added_tokens(tokens_any, path::String)::Vector{HFAddedToken}

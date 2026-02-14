@@ -13,6 +13,14 @@ function _json_get(obj, key::String)
     throw(ArgumentError("Missing key '$key' in JSON object"))
 end
 
+function _json_is_object(value)::Bool
+    return value !== nothing && (value isa AbstractDict || string(typeof(value)) == "JSON3.Object")
+end
+
+function _json_is_array(value)::Bool
+    return value !== nothing && (value isa AbstractVector || occursin("JSON3.Array", string(typeof(value))))
+end
+
 function _assert_exported_hf_json_sanity(tokenizer_json_path::String)::Nothing
     root = JSON3.read(read(tokenizer_json_path, String))
     model = _json_get(root, "model")
@@ -33,6 +41,29 @@ function _assert_exported_hf_json_sanity(tokenizer_json_path::String)::Nothing
             unk_token = String(_json_get(model, "unk_token"))
             @test _json_has_key(vocab, unk_token)
             @test Int(_json_get(vocab, unk_token)) in ids
+        end
+    end
+
+    if _json_has_key(root, "post_processor")
+        post = _json_get(root, "post_processor")
+        if post !== nothing && _json_is_object(post) && _json_has_key(post, "type")
+            if String(_json_get(post, "type")) == "TemplateProcessing"
+                @test _json_has_key(post, "special_tokens")
+                special_tokens = _json_get(post, "special_tokens")
+                @test _json_is_object(special_tokens)
+                @test !_json_is_array(special_tokens)
+
+                for key in ("single", "pair")
+                    @test _json_has_key(post, key)
+                    template_items = _json_get(post, key)
+                    @test _json_is_array(template_items)
+
+                    for item in template_items
+                        @test _json_is_object(item)
+                        @test _json_has_key(item, "SpecialToken") || _json_has_key(item, "Sequence")
+                    end
+                end
+            end
         end
     end
 
@@ -316,5 +347,34 @@ end
     @testset "Existing HF tokenizer can be re-exported" begin
         tokenizer = load_tokenizer(fixture("hf_json_wordpiece", "tokenizer.json"); format=:hf_tokenizer_json)
         _assert_hf_export_roundtrip(tokenizer, ["Hello world", "Hello keemena subwords"])
+    end
+
+    @testset "TemplateProcessing special_tokens array/map compatibility" begin
+        tokenizer_array = load_tokenizer(
+            fixture("hf_json_wordpiece", "tokenizer.json");
+            format=:hf_tokenizer_json,
+        )
+        tokenizer_map = load_tokenizer(
+            fixture("hf_json_wordpiece_canonical", "tokenizer.json");
+            format=:hf_tokenizer_json,
+        )
+
+        @test tokenizer_array isa HuggingFaceJSONTokenizer
+        @test tokenizer_map isa HuggingFaceJSONTokenizer
+
+        samples = [
+            "Hello world",
+            "Hello keemena subwords",
+        ]
+
+        for text in samples
+            @test tokenize(tokenizer_map, text) == tokenize(tokenizer_array, text)
+            for add_special_tokens in (false, true)
+                ids_array = encode(tokenizer_array, text; add_special_tokens=add_special_tokens)
+                ids_map = encode(tokenizer_map, text; add_special_tokens=add_special_tokens)
+                @test ids_map == ids_array
+                @test decode(tokenizer_map, ids_map) == decode(tokenizer_array, ids_array)
+            end
+        end
     end
 end
