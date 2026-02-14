@@ -14,6 +14,7 @@ include("huggingface_json/hf_json_types.jl")
 include("huggingface_json/hf_json_parse.jl")
 include("huggingface_json/hf_json_pipeline.jl")
 include("huggingface_json/hf_json_loader.jl")
+include("huggingface_json/hf_json_export.jl")
 include("training/Training.jl")
 using .Training: train_bpe,
     train_bpe_result,

@@ -14,6 +14,33 @@
 | `:tiktoken` | file or directory | `*.tiktoken` or tiktoken-text `tokenizer.model` | `path` (alias: `encoding_file`) | `load_tiktoken("/path/to/o200k_base.tiktoken")` |
 | `:unigram` | file or directory | `unigram.tsv` | `path` (alias: `unigram_tsv`) | `load_unigram("/path/to/unigram.tsv")` |
 
+## Exporting Hugging Face `tokenizer.json`
+
+Use the HF export target to write `tokenizer.json` from any supported
+KeemenaSubwords tokenizer:
+
+```julia
+export_tokenizer(tokenizer, "out_dir"; format=:hf_tokenizer_json)
+# equivalent via save_tokenizer
+save_tokenizer(tokenizer, "out_dir"; format=:hf_tokenizer_json)
+```
+
+Reload in Julia:
+
+```julia
+reloaded = load_tokenizer("out_dir"; format=:hf_tokenizer_json)
+```
+
+Load the same file in Python Fast tokenizers:
+
+```python
+from transformers import PreTrainedTokenizerFast
+tok = PreTrainedTokenizerFast(tokenizer_file="out_dir/tokenizer.json")
+```
+
+Current scope note:
+- `tokenizer_config.json` and `special_tokens_map.json` are not emitted yet.
+
 ## Detection Notes
 
 - Directory preference order:

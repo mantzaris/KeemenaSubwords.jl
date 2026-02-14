@@ -37,7 +37,8 @@ function encode(
 end
 
 function decode(tokenizer::HuggingFaceJSONTokenizer, ids::AbstractVector{Int})::String
-    text = decode(tokenizer.base, ids)
+    filtered_ids = _hf_decode_filter_ids(tokenizer, ids)
+    text = decode(tokenizer.base, filtered_ids)
     return _apply_hf_decoder(tokenizer.decoder, text, tokenizer)
 end
 
@@ -52,6 +53,20 @@ eos_id(tokenizer::HuggingFaceJSONTokenizer)::Union{Int,Nothing} = get(tokenizer.
 
 function special_tokens(tokenizer::HuggingFaceJSONTokenizer)::Dict{Symbol,Int}
     return copy(tokenizer.special_token_ids)
+end
+
+function _hf_decode_filter_ids(
+    tokenizer::HuggingFaceJSONTokenizer,
+    ids::AbstractVector{Int},
+)::Vector{Int}
+    skip_ids = Set{Int}()
+    for symbol in (:pad, :cls, :sep, :bos, :eos)
+        special_id = get(tokenizer.special_token_ids, symbol, nothing)
+        special_id === nothing || push!(skip_ids, special_id)
+    end
+
+    isempty(skip_ids) && return Int[id for id in ids]
+    return Int[id for id in ids if !(id in skip_ids)]
 end
 
 function _segment_hf_input(

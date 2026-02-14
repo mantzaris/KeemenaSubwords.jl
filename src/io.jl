@@ -686,7 +686,8 @@ function _hf_local_model_offsets(
     tokens::Vector{String},
     ids::Vector{Int},
 )::Union{Nothing,Vector{Tuple{Int,Int}}}
-    pre = tokenizer.pretokenizer
+    pre = _hf_effective_pretokenizer_for_offsets(tokenizer.pretokenizer)
+    pre === nothing && return nothing
 
     if pre isa HFNoopPreTokenizer || pre isa HFWhitespacePreTokenizer
         return _token_offsets_for_tokens(tokenizer.base, text, tokens, ids)
@@ -698,6 +699,39 @@ function _hf_local_model_offsets(
         return shift == 0 ? base_offsets : _shift_offsets(base_offsets, shift)
     elseif pre isa HFMetaspacePreTokenizer
         return _hf_metaspace_offsets(tokenizer, text, tokens, pre)
+    end
+
+    return nothing
+end
+
+function _hf_effective_pretokenizer_for_offsets(
+    pre::HFJSONPreTokenizer,
+)::Union{Nothing,HFJSONPreTokenizer}
+    if pre isa HFNoopPreTokenizer ||
+       pre isa HFWhitespacePreTokenizer ||
+       pre isa HFByteLevelPreTokenizer ||
+       pre isa HFMetaspacePreTokenizer
+        return pre
+    elseif pre isa HFSequencePreTokenizer
+        effective = nothing
+        for item in pre.items
+            item_effective = _hf_effective_pretokenizer_for_offsets(item)
+            item_effective === nothing && return nothing
+
+            if item_effective isa HFNoopPreTokenizer || item_effective isa HFWhitespacePreTokenizer
+                continue
+            end
+
+            if effective === nothing
+                effective = item_effective
+            elseif typeof(effective) != typeof(item_effective)
+                return nothing
+            else
+                effective = item_effective
+            end
+        end
+
+        return effective === nothing ? HFNoopPreTokenizer() : effective
     end
 
     return nothing
@@ -859,7 +893,8 @@ function _token_offsets_for_tokens(
     tokens::Vector{String},
     ids::Vector{Int},
 )::Union{Nothing,Vector{Tuple{Int,Int}}}
-    pre = tokenizer.pretokenizer
+    pre = _hf_effective_pretokenizer_for_offsets(tokenizer.pretokenizer)
+    pre === nothing && return nothing
 
     if pre isa HFNoopPreTokenizer || pre isa HFWhitespacePreTokenizer
         return _token_offsets_for_tokens(tokenizer.base, normalized, tokens, ids)
@@ -1092,6 +1127,7 @@ Supported `format` values:
 - `:wordpiece_vocab`
 - `:unigram_tsv`
 - `:sentencepiece_model`
+- `:hf_tokenizer_json`
 """
 function export_tokenizer(
     tokenizer::AbstractSubwordTokenizer,
@@ -1109,6 +1145,8 @@ function export_tokenizer(
         _write_unigram_tsv(_as_unigram(tokenizer), joinpath(outdir, "unigram.tsv"))
     elseif target === :sentencepiece_model
         _write_sentencepiece_model(tokenizer, joinpath(outdir, "spm.model"))
+    elseif target === :hf_tokenizer_json
+        export_hf_tokenizer_json(tokenizer, joinpath(outdir, "tokenizer.json"))
     else
         throw(ArgumentError("Unsupported export target: $target"))
     end
@@ -1162,6 +1200,8 @@ function _canonical_export_format(tokenizer::AbstractSubwordTokenizer, format::S
         return :unigram_tsv
     elseif format in (:sentencepiece, :sentencepiece_model)
         return :sentencepiece_model
+    elseif format in (:hf_tokenizer_json,)
+        return :hf_tokenizer_json
     end
 
     throw(ArgumentError("Unsupported export format: $format"))

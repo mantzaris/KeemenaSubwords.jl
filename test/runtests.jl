@@ -549,6 +549,7 @@ end
     end
 
     include("training/runtests_training.jl")
+    include("hf_json_export_roundtrip.jl")
 
     @testset "Section 16 docs contracts and loader coherence" begin
         wp_path = fixture("wordpiece", "vocab.txt")
