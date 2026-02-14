@@ -15,7 +15,15 @@ include("huggingface_json/hf_json_parse.jl")
 include("huggingface_json/hf_json_pipeline.jl")
 include("huggingface_json/hf_json_loader.jl")
 include("training/Training.jl")
-using .Training: train_bpe, train_bpe_result, train_bytebpe, train_bytebpe_result, train_unigram, train_unigram_result, train_wordpiece, train_sentencepiece
+using .Training: train_bpe,
+    train_bpe_result,
+    train_bytebpe,
+    train_bytebpe_result,
+    train_unigram,
+    train_unigram_result,
+    train_wordpiece,
+    train_wordpiece_result,
+    train_sentencepiece
 include("io.jl")
 
 export AbstractSubwordTokenizer,
@@ -99,6 +107,7 @@ export AbstractSubwordTokenizer,
        train_unigram,
        train_unigram_result,
        train_wordpiece,
+       train_wordpiece_result,
        train_sentencepiece,
        save_tokenizer,
        export_tokenizer

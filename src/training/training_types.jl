@@ -60,3 +60,21 @@ struct UnigramTrainingArtifacts <: AbstractTrainingArtifacts
     token_logprobs::Vector{Float64}
     word_counts::Dict{String,Int}
 end
+
+struct WordPieceTrainingConfig <: AbstractTrainingConfig
+    vocab_size::Int
+    min_frequency::Int
+    special_tokens::Dict{Symbol,String}
+    pretokenizer::Union{Nothing,Function}
+    continuation_prefix::String
+    max_input_chars_per_word::Int
+    model_name::String
+    version::VersionNumber
+end
+
+struct WordPieceTrainingArtifacts <: AbstractTrainingArtifacts
+    vocab_tokens::Vector{String}
+    merge_pairs::Vector{Tuple{String,String}}
+    merge_scores::Vector{Float64}
+    word_counts::Dict{String,Int}
+end

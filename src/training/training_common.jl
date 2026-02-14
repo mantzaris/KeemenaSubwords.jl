@@ -126,6 +126,19 @@ function _validate_unigram_config(config::UnigramTrainingConfig)::Nothing
     return nothing
 end
 
+function _validate_wordpiece_config(config::WordPieceTrainingConfig)::Nothing
+    _validate_positive(config.vocab_size, "vocab_size")
+    _validate_positive(config.min_frequency, "min_frequency")
+    _validate_nonempty(config.continuation_prefix, "continuation_prefix")
+    _validate_nonempty(config.model_name, "model_name")
+    config.max_input_chars_per_word >= 0 || throw(ArgumentError(
+        "max_input_chars_per_word must be >= 0",
+    ))
+    haskey(config.special_tokens, :unk) || throw(ArgumentError("special_tokens must include :unk"))
+    _validate_nonempty(config.special_tokens[:unk], "special_tokens[:unk]")
+    return nothing
+end
+
 function _validate_required_vocab_capacity(
     vocab_size::Int,
     required_tokens::Vector{String},

@@ -165,24 +165,69 @@ function train_unigram_result(
 end
 
 """
-Optional WordPiece training entry point.
-
-This API is reserved for a later iteration.
+Train a WordPiece tokenizer.
 """
 function train_wordpiece(
     corpus;
     vocab_size::Int,
     min_frequency::Int=2,
-    special_tokens::Dict{Symbol,String}=Dict(:unk => "[UNK]", :pad => "[PAD]"),
+    special_tokens::Dict{Symbol,String}=Dict(
+        :unk => "[UNK]",
+        :pad => "[PAD]",
+        :cls => "[CLS]",
+        :sep => "[SEP]",
+        :mask => "[MASK]",
+    ),
+    pretokenizer::Union{Nothing,Function}=nothing,
     continuation_prefix::String="##",
+    max_input_chars_per_word::Int=100,
+    model_name::String="trained_wordpiece",
+    version::VersionNumber=v"0.3.0",
 )::WordPieceTokenizer
-    return _train_wordpiece_impl(
+    return train_wordpiece_result(
         corpus;
         vocab_size=vocab_size,
         min_frequency=min_frequency,
         special_tokens=special_tokens,
+        pretokenizer=pretokenizer,
         continuation_prefix=continuation_prefix,
+        max_input_chars_per_word=max_input_chars_per_word,
+        model_name=model_name,
+        version=version,
+    ).tokenizer
+end
+
+"""
+Train a WordPiece tokenizer and return model artifacts.
+"""
+function train_wordpiece_result(
+    corpus;
+    vocab_size::Int,
+    min_frequency::Int=2,
+    special_tokens::Dict{Symbol,String}=Dict(
+        :unk => "[UNK]",
+        :pad => "[PAD]",
+        :cls => "[CLS]",
+        :sep => "[SEP]",
+        :mask => "[MASK]",
+    ),
+    pretokenizer::Union{Nothing,Function}=nothing,
+    continuation_prefix::String="##",
+    max_input_chars_per_word::Int=100,
+    model_name::String="trained_wordpiece",
+    version::VersionNumber=v"0.3.0",
+)::TrainingResult{WordPieceTokenizer,WordPieceTrainingConfig,WordPieceTrainingArtifacts}
+    config = WordPieceTrainingConfig(
+        vocab_size,
+        min_frequency,
+        _normalize_special_tokens(special_tokens),
+        pretokenizer,
+        String(continuation_prefix),
+        max_input_chars_per_word,
+        String(model_name),
+        version,
     )
+    return _train_wordpiece_result_impl(corpus, config)
 end
 
 """

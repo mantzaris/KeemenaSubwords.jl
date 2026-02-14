@@ -27,6 +27,8 @@ export AbstractTrainingConfig,
     ByteBPETrainingArtifacts,
     UnigramTrainingConfig,
     UnigramTrainingArtifacts,
+    WordPieceTrainingConfig,
+    WordPieceTrainingArtifacts,
     train_bpe,
     train_bpe_result,
     train_bytebpe,
@@ -34,6 +36,7 @@ export AbstractTrainingConfig,
     train_unigram,
     train_unigram_result,
     train_wordpiece,
+    train_wordpiece_result,
     train_sentencepiece
 
 end # module Training
