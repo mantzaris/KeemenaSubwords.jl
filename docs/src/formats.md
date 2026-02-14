@@ -48,6 +48,22 @@ Current scope note:
   Keemena ByteBPE interoperability, so Python/Rust HF loaders do not silently
   fall back to different defaults.
 
+### BERT Components in `tokenizer.json`
+
+KeemenaSubwords now supports the common Hugging Face BERT pipeline components:
+- `normalizer.type = "BertNormalizer"`
+- `pre_tokenizer.type = "BertPreTokenizer"`
+
+Offsets for these pipelines follow the same package contract:
+- offsets are computed against `tokenization_view(tokenizer, text)` (the
+  tokenizer-normalized text),
+- inserted post-processor specials keep sentinel `(0,0)`,
+- spanful offsets remain 1-based UTF-8 codeunit half-open spans.
+
+KeemenaPreprocessing integration remains:
+`tokenization_text = tokenization_view(tokenizer, clean_text)` then
+`encode_result(tokenizer, tokenization_text; assume_normalized=true, return_offsets=true, return_masks=true)`.
+
 ## Detection Notes
 
 - Directory preference order:

@@ -43,9 +43,19 @@ end
 struct HFSequenceNormalizer <: HFJSONNormalizer
     items::Vector{HFJSONNormalizer}
 end
+struct HFBertNormalizer <: HFJSONNormalizer
+    clean_text::Bool
+    handle_chinese_chars::Bool
+    strip_accents::Union{Nothing,Bool}
+    lowercase::Bool
+end
+
+effective_strip_accents(normalizer::HFBertNormalizer)::Bool =
+    normalizer.strip_accents === nothing ? normalizer.lowercase : normalizer.strip_accents
 
 abstract type HFJSONPreTokenizer end
 struct HFNoopPreTokenizer <: HFJSONPreTokenizer end
+struct HFBertPreTokenizer <: HFJSONPreTokenizer end
 struct HFByteLevelPreTokenizer <: HFJSONPreTokenizer
     add_prefix_space::Bool
     trim_offsets::Bool

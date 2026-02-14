@@ -697,6 +697,8 @@ function _hf_local_model_offsets(
             fallback_offsets !== nothing && return fallback_offsets
         end
         return _token_offsets_for_tokens(tokenizer.base, text, tokens, ids)
+    elseif pre isa HFBertPreTokenizer
+        return _hf_bert_offsets(tokenizer, text, tokens)
     elseif pre isa HFByteLevelPreTokenizer
         pretokenized = _apply_hf_pretokenizer(pre, text)
         base_offsets = _token_offsets_for_tokens(tokenizer.base, pretokenized, tokens, ids)
@@ -781,6 +783,7 @@ function _hf_effective_pretokenizer_for_offsets(
 )::Union{Nothing,HFJSONPreTokenizer}
     if pre isa HFNoopPreTokenizer ||
        pre isa HFWhitespacePreTokenizer ||
+       pre isa HFBertPreTokenizer ||
        pre isa HFByteLevelPreTokenizer ||
        pre isa HFMetaspacePreTokenizer
         return pre

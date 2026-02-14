@@ -129,6 +129,12 @@ function _parse_hf_normalizer(normalizer_obj, path::String)::HFJSONNormalizer
 
     if type_name == "Lowercase"
         return HFLowercaseNormalizer()
+    elseif type_name == "BertNormalizer"
+        clean_text = _json_get_bool(normalizer_obj, "clean_text", true)
+        handle_chinese_chars = _json_get_bool(normalizer_obj, "handle_chinese_chars", true)
+        strip_accents = _json_get_optional_bool(normalizer_obj, "strip_accents", "$path.strip_accents")
+        lowercase = _json_get_bool(normalizer_obj, "lowercase", false)
+        return HFBertNormalizer(clean_text, handle_chinese_chars, strip_accents, lowercase)
     elseif type_name == "NFC"
         return HFNFCNormalizer()
     elseif type_name == "NFD"
@@ -168,6 +174,8 @@ function _parse_hf_pretokenizer(pre_obj, path::String)::HFJSONPreTokenizer
         trim_offsets = _json_get_bool(pre_obj, "trim_offsets", true)
         use_regex = _json_get_bool(pre_obj, "use_regex", true)
         return HFByteLevelPreTokenizer(add_prefix_space, trim_offsets, use_regex)
+    elseif type_name == "BertPreTokenizer"
+        return HFBertPreTokenizer()
     elseif type_name in ("Whitespace", "WhitespaceSplit")
         return HFWhitespacePreTokenizer()
     elseif type_name == "Metaspace"
@@ -596,6 +604,17 @@ function _json_get_optional_float(obj, key::String)::Union{Nothing,Float64}
     value = _json_get(obj, key)
     value === nothing && return nothing
     return _as_float(value, key)
+end
+
+function _json_get_optional_bool(
+    obj,
+    key::String,
+    path::String,
+)::Union{Nothing,Bool}
+    value = _json_get(obj, key)
+    value === nothing && return nothing
+    value isa Bool || throw(ArgumentError("Expected boolean/null at $path"))
+    return value
 end
 
 function _as_int(value, path::String)::Int

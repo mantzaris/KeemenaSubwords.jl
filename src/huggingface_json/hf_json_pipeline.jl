@@ -330,6 +330,54 @@ function _byte_fallback_tokens(
     return isempty(hex_tokens) ? String[unk_token] : hex_tokens
 end
 
+function _is_hf_bert_chinese_char(c::Char)::Bool
+    codepoint = Int(c)
+    return (0x4E00 <= codepoint <= 0x9FFF) ||
+           (0x3400 <= codepoint <= 0x4DBF) ||
+           (0x20000 <= codepoint <= 0x2A6DF) ||
+           (0x2A700 <= codepoint <= 0x2B73F) ||
+           (0x2B740 <= codepoint <= 0x2B81F) ||
+           (0x2B820 <= codepoint <= 0x2CEAF) ||
+           (0xF900 <= codepoint <= 0xFAFF) ||
+           (0x2F800 <= codepoint <= 0x2FA1F)
+end
+
+function _is_hf_bert_control(c::Char)::Bool
+    isspace(c) && return false
+    char_string = string(c)
+    return occursin(r"^\p{Cc}$", char_string) || occursin(r"^\p{Cf}$", char_string)
+end
+
+function _apply_hf_bert_clean_text(text::String)::String
+    buffer = IOBuffer()
+    for c in text
+        if c == '\0' || c == '\ufffd'
+            continue
+        end
+        _is_hf_bert_control(c) && continue
+        if isspace(c)
+            write(buffer, ' ')
+        else
+            write(buffer, c)
+        end
+    end
+    return String(take!(buffer))
+end
+
+function _apply_hf_bert_chinese_spacing(text::String)::String
+    buffer = IOBuffer()
+    for c in text
+        if _is_hf_bert_chinese_char(c)
+            write(buffer, ' ')
+            write(buffer, c)
+            write(buffer, ' ')
+        else
+            write(buffer, c)
+        end
+    end
+    return String(take!(buffer))
+end
+
 function _apply_hf_normalizer(::HFNoopNormalizer, text::String)::String
     return text
 end
@@ -355,6 +403,29 @@ function _apply_hf_normalizer(::HFStripAccentsNormalizer, text::String)::String
     return replace(decomposed, r"\\p{M}+" => "")
 end
 
+function _apply_hf_normalizer(normalizer::HFBertNormalizer, text::String)::String
+    out = text
+
+    if normalizer.clean_text
+        out = _apply_hf_bert_clean_text(out)
+    end
+
+    if normalizer.handle_chinese_chars
+        out = _apply_hf_bert_chinese_spacing(out)
+    end
+
+    if normalizer.lowercase
+        out = lowercase(out)
+    end
+
+    if effective_strip_accents(normalizer)
+        decomposed = Base.Unicode.normalize(out, :NFD)
+        out = replace(decomposed, r"\p{Mn}+" => "")
+    end
+
+    return out
+end
+
 function _apply_hf_normalizer(normalizer::HFReplaceNormalizer, text::String)::String
     return replace(text, normalizer.pattern => normalizer.replacement)
 end
@@ -377,6 +448,63 @@ end
 
 function _apply_hf_pretokenizer(::HFWhitespacePreTokenizer, text::String)::String
     return text
+end
+
+function _is_hf_bert_punctuation(c::Char)::Bool
+    codepoint = Int(c)
+    return (0x21 <= codepoint <= 0x2F) ||
+           (0x3A <= codepoint <= 0x40) ||
+           (0x5B <= codepoint <= 0x60) ||
+           (0x7B <= codepoint <= 0x7E) ||
+           ispunct(c)
+end
+
+function _hf_bert_pretokenize_with_spans(
+    text::String,
+)::Vector{NamedTuple{(:piece, :start, :stop),Tuple{String,Int,Int}}}
+    pieces = NamedTuple{(:piece, :start, :stop),Tuple{String,Int,Int}}[]
+    isempty(text) && return pieces
+
+    idx = firstindex(text)
+    stop = lastindex(text)
+
+    while idx <= stop
+        current = text[idx]
+        if isspace(current)
+            idx = nextind(text, idx)
+            continue
+        end
+
+        start_idx = idx
+        if _is_hf_bert_punctuation(current)
+            next_idx = nextind(text, idx)
+            push!(pieces, (piece=string(current), start=start_idx, stop=next_idx))
+            idx = next_idx
+            continue
+        end
+
+        end_idx = idx
+        while end_idx <= stop
+            c = text[end_idx]
+            if isspace(c) || _is_hf_bert_punctuation(c)
+                break
+            end
+            end_idx = nextind(text, end_idx)
+        end
+
+        token_stop = end_idx
+        token = String(SubString(text, start_idx, prevind(text, token_stop)))
+        push!(pieces, (piece=token, start=start_idx, stop=token_stop))
+        idx = token_stop
+    end
+
+    return pieces
+end
+
+function _apply_hf_pretokenizer(::HFBertPreTokenizer, text::String)::String
+    pieces = _hf_bert_pretokenize_with_spans(text)
+    isempty(pieces) && return ""
+    return join([piece.piece for piece in pieces], " ")
 end
 
 function _apply_hf_pretokenizer(pre::HFByteLevelPreTokenizer, text::String)::String
@@ -589,4 +717,40 @@ function _apply_hf_decoder(
         out = _apply_hf_decoder(item, out, tokenizer)
     end
     return out
+end
+
+function _hf_bert_offsets(
+    tokenizer::HuggingFaceJSONTokenizer,
+    text::String,
+    tokens::Vector{String},
+)::Union{Nothing,Vector{Tuple{Int,Int}}}
+    offsets = Tuple{Int,Int}[]
+    token_idx = 1
+
+    for piece in _hf_bert_pretokenize_with_spans(text)
+        piece_ids = _encode_hf_model_segment(tokenizer, piece.piece)
+        piece_tokens = String[id_to_token(tokenizer, id) for id in piece_ids]
+        piece_offsets = _token_offsets_for_tokens(
+            tokenizer.base,
+            piece.piece,
+            piece_tokens,
+            piece_ids,
+        )
+        piece_offsets === nothing && return nothing
+        length(piece_offsets) == length(piece_tokens) || return nothing
+        token_idx + length(piece_tokens) - 1 <= length(tokens) || return nothing
+
+        for (i, piece_token) in enumerate(piece_tokens)
+            tokens[token_idx] == piece_token || return nothing
+            start_idx, stop_idx = piece_offsets[i]
+            push!(offsets, (
+                _advance_codeunits(piece.start, start_idx - 1),
+                _advance_codeunits(piece.start, stop_idx - 1),
+            ))
+            token_idx += 1
+        end
+    end
+
+    token_idx == length(tokens) + 1 || return nothing
+    return offsets
 end

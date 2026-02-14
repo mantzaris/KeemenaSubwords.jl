@@ -100,6 +100,15 @@ _hf_export_normalizer(::AbstractSubwordTokenizer) = nothing
 _hf_export_normalizer(tokenizer::HuggingFaceJSONTokenizer) = _hf_export_normalizer(tokenizer.normalizer)
 _hf_export_normalizer(::HFNoopNormalizer) = nothing
 _hf_export_normalizer(::HFLowercaseNormalizer) = Dict("type" => "Lowercase")
+function _hf_export_normalizer(normalizer::HFBertNormalizer)
+    return Dict(
+        "type" => "BertNormalizer",
+        "clean_text" => normalizer.clean_text,
+        "handle_chinese_chars" => normalizer.handle_chinese_chars,
+        "strip_accents" => normalizer.strip_accents,
+        "lowercase" => normalizer.lowercase,
+    )
+end
 _hf_export_normalizer(::HFNFCNormalizer) = Dict("type" => "NFC")
 _hf_export_normalizer(::HFNFKCNormalizer) = Dict("type" => "NFKC")
 _hf_export_normalizer(::HFNFDNormalizer) = Dict("type" => "NFD")
@@ -173,6 +182,7 @@ function _hf_export_pretokenizer(pre::HFByteLevelPreTokenizer)
         pre.use_regex,
     )
 end
+_hf_export_pretokenizer(::HFBertPreTokenizer) = Dict("type" => "BertPreTokenizer")
 
 _hf_export_pretokenizer(::HFWhitespacePreTokenizer) = Dict("type" => "WhitespaceSplit")
 
