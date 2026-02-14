@@ -11,9 +11,10 @@ Available now:
 - `train_bpe(...)`
 - `train_bytebpe(...)`
 - `train_unigram(...)`
+- `train_wordpiece(...)`
+- `train_wordpiece_result(...)`
 
 Planned (stub entrypoints):
-- `train_wordpiece(...)`
 - `train_sentencepiece(...)`
 
 ## Training API
@@ -26,13 +27,13 @@ train_bytebpe_result
 train_unigram
 train_unigram_result
 train_wordpiece
+train_wordpiece_result
 train_sentencepiece
 ```
 
 Current behavior:
-- WordPiece and SentencePiece training entrypoints exist for discoverability and
-  currently throw clear `ArgumentError` messages because algorithms are not yet
-  implemented.
+- SentencePiece training remains a discoverability stub and currently throws a
+  clear `ArgumentError` because training is not yet implemented.
 - Unigram training defaults to SentencePiece-style `whitespace_marker="▁"` so
   multi-word text can round-trip through `decode(encode(...))`.
 - If `whitespace_marker=""`, runtime Unigram tokenization is still word-split,
