@@ -43,7 +43,8 @@ function _assert_hf_export_roundtrip(
     tokenizer::AbstractSubwordTokenizer,
     samples::Vector{String};
     add_special_modes::Tuple{Vararg{Bool}}=(false, true),
-)::Nothing
+    require_string_boundaries::Bool=true,
+)::NamedTuple{(:explicit, :auto),Tuple{HuggingFaceJSONTokenizer,HuggingFaceJSONTokenizer}}
     outdir = mktempdir()
     export_tokenizer(tokenizer, outdir; format=:hf_tokenizer_json)
 
@@ -53,41 +54,45 @@ function _assert_hf_export_roundtrip(
 
     reloaded = load_tokenizer(outdir; format=:hf_tokenizer_json)
     @test reloaded isa HuggingFaceJSONTokenizer
+    reloaded_auto = load_tokenizer(outdir)
+    @test reloaded_auto isa HuggingFaceJSONTokenizer
 
-    for text in samples
-        @test tokenize(reloaded, text) == tokenize(tokenizer, text)
+    for candidate in (reloaded, reloaded_auto)
+        for text in samples
+            @test tokenize(candidate, text) == tokenize(tokenizer, text)
 
-        for add_special_tokens in add_special_modes
-            ids_original = encode(tokenizer, text; add_special_tokens=add_special_tokens)
-            ids_reloaded = encode(reloaded, text; add_special_tokens=add_special_tokens)
-            @test ids_reloaded == ids_original
-            @test decode(reloaded, ids_reloaded) == decode(tokenizer, ids_original)
+            for add_special_tokens in add_special_modes
+                ids_original = encode(tokenizer, text; add_special_tokens=add_special_tokens)
+                ids_reloaded = encode(candidate, text; add_special_tokens=add_special_tokens)
+                @test ids_reloaded == ids_original
+                @test decode(candidate, ids_reloaded) == decode(tokenizer, ids_original)
 
-            tokenization_text = tokenization_view(reloaded, text)
-            result = encode_result(
-                reloaded,
-                tokenization_text;
-                assume_normalized=true,
-                add_special_tokens=add_special_tokens,
-                return_offsets=true,
-                return_masks=true,
-            )
+                tokenization_text = tokenization_view(candidate, text)
+                result = encode_result(
+                    candidate,
+                    tokenization_text;
+                    assume_normalized=true,
+                    add_special_tokens=add_special_tokens,
+                    return_offsets=true,
+                    return_masks=true,
+                )
 
-            @test result.offsets !== nothing
-            @test_nowarn assert_offsets_contract(
-                tokenization_text,
-                result.offsets;
-                require_string_boundaries=true,
-            )
-            @test offsets_are_nonoverlapping(
-                result.offsets;
-                ignore_sentinel=true,
-                ignore_empty=true,
-            )
+                @test result.offsets !== nothing
+                @test_nowarn assert_offsets_contract(
+                    tokenization_text,
+                    result.offsets;
+                    require_string_boundaries=require_string_boundaries,
+                )
+                @test offsets_are_nonoverlapping(
+                    result.offsets;
+                    ignore_sentinel=true,
+                    ignore_empty=true,
+                )
+            end
         end
     end
 
-    return nothing
+    return (explicit=reloaded, auto=reloaded_auto)
 end
 
 @testset "Section 26 Hugging Face tokenizer.json export round-trip" begin
@@ -228,6 +233,84 @@ end
         )
 
         _assert_hf_export_roundtrip(tokenizer, samples)
+    end
+
+    @testset "ByteBPE export/reload parity" begin
+        byte_corpus = [
+            "hello world",
+            "byte level bpe works",
+            "café costs 5!",
+            "emoji 🙂 token",
+            "punctuation, and symbols!",
+        ]
+
+        byte_samples = [
+            "hello world",
+            "café!",
+            "emoji 🙂",
+            "café 🙂 world",
+        ]
+
+        tokenizer = train_bytebpe(
+            byte_corpus;
+            vocab_size=384,
+            min_frequency=1,
+            special_tokens=Dict(
+                :unk => "<UNK>",
+                :pad => "<PAD>",
+                :bos => "<BOS>",
+                :eos => "<EOS>",
+            ),
+            end_of_word_marker="</w>",
+            include_full_byte_alphabet=true,
+            model_name="hf_json_export_bytebpe",
+            version=v"0.3.0",
+        )
+
+        reloaded = _assert_hf_export_roundtrip(
+            tokenizer,
+            byte_samples;
+            require_string_boundaries=false,
+        )
+        @test reloaded.explicit isa HuggingFaceJSONTokenizer
+        @test reloaded.explicit.base isa ByteBPETokenizer
+        @test reloaded.auto isa HuggingFaceJSONTokenizer
+        @test reloaded.auto.base isa ByteBPETokenizer
+
+        multibyte_text = "café 🙂 token"
+        tokenization_text = tokenization_view(reloaded.explicit, multibyte_text)
+        multibyte_result = encode_result(
+            reloaded.explicit,
+            tokenization_text;
+            assume_normalized=true,
+            add_special_tokens=true,
+            return_offsets=true,
+            return_masks=true,
+        )
+        @test multibyte_result.offsets !== nothing
+        @test_nowarn assert_offsets_contract(
+            tokenization_text,
+            multibyte_result.offsets;
+            require_string_boundaries=false,
+        )
+        @test offsets_are_nonoverlapping(
+            multibyte_result.offsets;
+            ignore_sentinel=true,
+            ignore_empty=true,
+        )
+
+        nonboundary_offsets = Tuple{Int,Int}[]
+        for offset in multibyte_result.offsets
+            has_nonempty_span(offset) || continue
+            try_span_substring(tokenization_text, offset) === nothing || continue
+            push!(nonboundary_offsets, offset)
+        end
+        if !isempty(nonboundary_offsets)
+            for offset in nonboundary_offsets
+                @test_nowarn span_codeunits(tokenization_text, offset)
+                @test !isempty(span_codeunits(tokenization_text, offset))
+            end
+        end
     end
 
     @testset "Existing HF tokenizer can be re-exported" begin
