@@ -66,3 +66,32 @@
     @test bad_maxlen_err isa ArgumentError
     @test occursin("max_subword_length", lowercase(sprint(showerror, bad_maxlen_err)))
 end
+
+@testset "Unigram default whitespace marker roundtrip" begin
+    corpus = [
+        "hello world",
+        "hello tokenizers",
+        "world training",
+    ]
+
+    training = train_unigram_result(
+        corpus;
+        vocab_size=64,
+        seed_size=200,
+        num_iters=2,
+        max_subword_length=6,
+        prune_fraction=0.2,
+        special_tokens=Dict(
+            :unk => "<UNK>",
+            :pad => "<PAD>",
+        ),
+    )
+    tokenizer = training.tokenizer
+
+    @test training.config.whitespace_marker == "▁"
+    @test tokenizer.whitespace_marker == "▁"
+
+    text = "hello world"
+    ids = encode(tokenizer, text; add_special_tokens=false)
+    @test decode(tokenizer, ids) == text
+end

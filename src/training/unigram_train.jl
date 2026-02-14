@@ -14,7 +14,7 @@ function _train_unigram_impl(
         0.2,
         _normalize_special_tokens(special_tokens),
         pretokenizer,
-        "",
+        "▁",
         "trained_unigram",
         v"0.3.0",
     )

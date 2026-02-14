@@ -114,7 +114,7 @@ function train_unigram(
     prune_fraction::Float64=0.2,
     special_tokens::Dict{Symbol,String}=Dict(:unk => "<UNK>", :pad => "<PAD>"),
     pretokenizer::Union{Nothing,Function}=nothing,
-    whitespace_marker::String="",
+    whitespace_marker::String="▁",
     model_name::String="trained_unigram",
     version::VersionNumber=v"0.3.0",
 )::UnigramTokenizer
@@ -145,7 +145,7 @@ function train_unigram_result(
     prune_fraction::Float64=0.2,
     special_tokens::Dict{Symbol,String}=Dict(:unk => "<UNK>", :pad => "<PAD>"),
     pretokenizer::Union{Nothing,Function}=nothing,
-    whitespace_marker::String="",
+    whitespace_marker::String="▁",
     model_name::String="trained_unigram",
     version::VersionNumber=v"0.3.0",
 )::TrainingResult{UnigramTokenizer,UnigramTrainingConfig,UnigramTrainingArtifacts}
