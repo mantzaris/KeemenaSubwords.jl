@@ -56,6 +56,12 @@
     outdir = mktempdir()
     save_tokenizer(tokenizer, outdir)
     reloaded = load_tokenizer(outdir; format=:wordpiece)
+    original_specials = special_tokens(tokenizer)
+    reloaded_specials = special_tokens(reloaded)
+    @test get(reloaded_specials, :mask, nothing) == get(original_specials, :mask, nothing)
+    @test get(reloaded_specials, :mask, nothing) !== nothing
+    @test get(reloaded_specials, :cls, nothing) == get(original_specials, :cls, nothing)
+    @test get(reloaded_specials, :sep, nothing) == get(original_specials, :sep, nothing)
 
     for text in samples
         @test tokenize(reloaded, text) == tokenize(tokenizer, text)

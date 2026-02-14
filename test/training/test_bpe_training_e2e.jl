@@ -47,6 +47,10 @@
     outdir = mktempdir()
     save_tokenizer(tokenizer, outdir)
     reloaded = load_tokenizer(outdir; format=:bpe)
+    @test unk_id(reloaded) == unk_id(tokenizer)
+    @test pad_id(tokenizer) !== nothing
+    @test pad_id(reloaded) == pad_id(tokenizer)
+    @test pad_id(reloaded) !== nothing
 
     for text in samples
         @test tokenize(reloaded, text) == tokenize(tokenizer, text)

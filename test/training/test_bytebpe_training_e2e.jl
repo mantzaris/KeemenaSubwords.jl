@@ -58,6 +58,10 @@
         unk_token=training.config.special_tokens[:unk],
         end_of_word_marker=training.config.end_of_word_marker,
     )
+    @test unk_id(reloaded) == unk_id(tokenizer)
+    @test pad_id(tokenizer) !== nothing
+    @test pad_id(reloaded) == pad_id(tokenizer)
+    @test pad_id(reloaded) !== nothing
 
     for text in samples
         @test tokenize(reloaded, text) == tokenize(tokenizer, text)

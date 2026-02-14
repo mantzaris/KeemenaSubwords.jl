@@ -53,6 +53,7 @@ function detect_special_tokens(tokens::Vector{String}, unk_token::String)::Dict{
         (:pad, "[PAD]"),
         (:cls, "[CLS]"),
         (:sep, "[SEP]"),
+        (:mask, "[MASK]"),
         (:bos, "<s>"),
         (:eos, "</s>"),
     )
@@ -60,7 +61,10 @@ function detect_special_tokens(tokens::Vector{String}, unk_token::String)::Dict{
     end
 
     for (sym, token) in (
+        (:pad, "<PAD>"),
         (:pad, "<pad>"),
+        (:mask, "<mask>"),
+        (:mask, "<MASK>"),
         (:bos, "[BOS]"),
         (:eos, "[EOS]"),
     )

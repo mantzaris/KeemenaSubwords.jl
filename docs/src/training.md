@@ -31,6 +31,17 @@ train_wordpiece_result
 train_sentencepiece
 ```
 
+## Note on pretokenizer
+
+- `pretokenizer` is used only during training to split input text into units
+  for frequency counts.
+- Trained tokenizers do not persist or apply the training `pretokenizer` at
+  runtime.
+- For consistent behavior, apply equivalent preprocessing upstream (for
+  example via KeemenaPreprocessing) before calling `encode`/`encode_result`.
+- ByteBPE exports as `vocab.txt + merges.txt`; when reloading exported files,
+  use `format=:bytebpe` if format auto-detection is ambiguous.
+
 Current behavior:
 - SentencePiece training remains a discoverability stub and currently throws a
   clear `ArgumentError` because training is not yet implemented.
