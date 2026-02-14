@@ -110,22 +110,58 @@ function train_unigram(
     vocab_size::Int,
     seed_size::Int=200_000,
     num_iters::Int=5,
+    max_subword_length::Int=6,
+    prune_fraction::Float64=0.2,
     special_tokens::Dict{Symbol,String}=Dict(:unk => "<UNK>", :pad => "<PAD>"),
     pretokenizer::Union{Nothing,Function}=nothing,
+    whitespace_marker::String="",
+    model_name::String="trained_unigram",
+    version::VersionNumber=v"0.3.0",
 )::UnigramTokenizer
-    vocab_size > 0 || throw(ArgumentError("vocab_size must be positive"))
-    seed_size > 0 || throw(ArgumentError("seed_size must be positive"))
-    num_iters > 0 || throw(ArgumentError("num_iters must be positive"))
-
-    normalized_specials = _normalize_special_tokens(special_tokens)
-    return _train_unigram_impl(
+    return train_unigram_result(
         corpus;
         vocab_size=vocab_size,
         seed_size=seed_size,
         num_iters=num_iters,
-        special_tokens=normalized_specials,
+        max_subword_length=max_subword_length,
+        prune_fraction=prune_fraction,
+        special_tokens=special_tokens,
         pretokenizer=pretokenizer,
+        whitespace_marker=whitespace_marker,
+        model_name=model_name,
+        version=version,
+    ).tokenizer
+end
+
+"""
+Train a Unigram tokenizer and return model artifacts.
+"""
+function train_unigram_result(
+    corpus;
+    vocab_size::Int,
+    seed_size::Int=200_000,
+    num_iters::Int=5,
+    max_subword_length::Int=6,
+    prune_fraction::Float64=0.2,
+    special_tokens::Dict{Symbol,String}=Dict(:unk => "<UNK>", :pad => "<PAD>"),
+    pretokenizer::Union{Nothing,Function}=nothing,
+    whitespace_marker::String="",
+    model_name::String="trained_unigram",
+    version::VersionNumber=v"0.3.0",
+)::TrainingResult{UnigramTokenizer,UnigramTrainingConfig,UnigramTrainingArtifacts}
+    config = UnigramTrainingConfig(
+        vocab_size,
+        seed_size,
+        num_iters,
+        max_subword_length,
+        prune_fraction,
+        _normalize_special_tokens(special_tokens),
+        pretokenizer,
+        String(whitespace_marker),
+        String(model_name),
+        version,
     )
+    return _train_unigram_result_impl(corpus, config)
 end
 
 """

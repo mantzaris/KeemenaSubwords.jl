@@ -41,3 +41,22 @@ struct ByteBPETrainingArtifacts <: AbstractTrainingArtifacts
     pair_ranks::Dict{Tuple{String,String},Int}
     word_counts::Dict{String,Int}
 end
+
+struct UnigramTrainingConfig <: AbstractTrainingConfig
+    vocab_size::Int
+    seed_size::Int
+    num_iters::Int
+    max_subword_length::Int
+    prune_fraction::Float64
+    special_tokens::Dict{Symbol,String}
+    pretokenizer::Union{Nothing,Function}
+    whitespace_marker::String
+    model_name::String
+    version::VersionNumber
+end
+
+struct UnigramTrainingArtifacts <: AbstractTrainingArtifacts
+    vocab_tokens::Vector{String}
+    token_logprobs::Vector{Float64}
+    word_counts::Dict{String,Int}
+end

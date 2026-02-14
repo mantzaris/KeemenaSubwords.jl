@@ -111,6 +111,21 @@ function _validate_bytebpe_config(config::ByteBPETrainingConfig)::Nothing
     return nothing
 end
 
+function _validate_unigram_config(config::UnigramTrainingConfig)::Nothing
+    _validate_positive(config.vocab_size, "vocab_size")
+    _validate_positive(config.seed_size, "seed_size")
+    _validate_positive(config.num_iters, "num_iters")
+    _validate_positive(config.max_subword_length, "max_subword_length")
+    _validate_nonempty(config.model_name, "model_name")
+    haskey(config.special_tokens, :unk) || throw(ArgumentError("special_tokens must include :unk"))
+
+    (0.0 <= config.prune_fraction < 1.0) || throw(ArgumentError(
+        "prune_fraction must be in [0, 1)",
+    ))
+
+    return nothing
+end
+
 function _validate_required_vocab_capacity(
     vocab_size::Int,
     required_tokens::Vector{String},

@@ -14,7 +14,7 @@ Expected format (tab-separated):
 """
 function load_unigram(
     path::AbstractString;
-    whitespace_marker::AbstractString="",
+    whitespace_marker::Union{Nothing,AbstractString}=nothing,
     unk_token::AbstractString="<unk>",
     model_name::Union{Nothing,AbstractString}=nothing,
 )::UnigramTokenizer
@@ -24,6 +24,7 @@ function load_unigram(
     tokens = parsed.tokens
     scores = parsed.scores
     special_map = parsed.special_map
+    header_whitespace_marker = parsed.whitespace_marker
 
     if !haskey(special_map, :unk)
         if String(unk_token) in tokens
@@ -41,8 +42,14 @@ function load_unigram(
 
     name = model_name === nothing ? basename(model_path) : String(model_name)
     metadata = TokenizerMetadata(:unigram, name, v"0.2.0", :none)
+    resolved_whitespace_marker = if whitespace_marker === nothing
+        header_whitespace_marker === nothing ? "" : header_whitespace_marker
+    else
+        String(whitespace_marker)
+    end
+    resolved_unk_token = special_map[:unk]
 
-    return UnigramTokenizer(vocab, scores, String(unk_token), String(whitespace_marker), metadata)
+    return UnigramTokenizer(vocab, scores, resolved_unk_token, resolved_whitespace_marker, metadata)
 end
 
 (tokenizer::UnigramTokenizer)(text::AbstractString)::Vector{String} = tokenize(tokenizer, text)
@@ -157,16 +164,23 @@ function _resolve_unigram_path(path::AbstractString)::String
     return String(path)
 end
 
-function _read_unigram_tsv(path::AbstractString)::NamedTuple{(:tokens, :scores, :special_map),Tuple{Vector{String},Vector{Float64},Dict{Symbol,String}}}
+function _read_unigram_tsv(path::AbstractString)::NamedTuple
     tokens = String[]
     scores = Float64[]
     special_map = Dict{Symbol,String}()
+    whitespace_marker = nothing
 
     open(path, "r") do io
         for raw_line in eachline(io)
             line = strip(raw_line)
             isempty(line) && continue
-            startswith(line, "#") && continue
+
+            if startswith(line, "#")
+                if startswith(line, "# whitespace_marker=")
+                    whitespace_marker = replace(line, "# whitespace_marker=" => ""; count=1)
+                end
+                continue
+            end
 
             fields = split(line, '\t')
             length(fields) >= 2 || throw(ArgumentError("Invalid unigram row in $path: $line"))
@@ -186,7 +200,12 @@ function _read_unigram_tsv(path::AbstractString)::NamedTuple{(:tokens, :scores, 
     end
 
     isempty(tokens) && throw(ArgumentError("Unigram file is empty: $path"))
-    return (tokens=tokens, scores=scores, special_map=special_map)
+    return (
+        tokens=tokens,
+        scores=scores,
+        special_map=special_map,
+        whitespace_marker=whitespace_marker,
+    )
 end
 
 function _viterbi_segment(tokenizer::UnigramTokenizer, input::String)::Vector{String}

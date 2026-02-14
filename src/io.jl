@@ -756,13 +756,16 @@ function _token_offsets_for_tokens(
     ids::Vector{Int},
 )::Union{Nothing,Vector{Tuple{Int,Int}}}
     _ = ids
-    isempty(tokenizer.whitespace_marker) || return nothing
+    strip_piece = isempty(tokenizer.whitespace_marker) ?
+        (piece -> piece) :
+        (piece -> replace(piece, tokenizer.whitespace_marker => ""))
+
     return _wordwise_piece_offsets(
         normalized,
         tokenizer,
         tokens;
         unk_token=tokenizer.unk_token,
-        strip_token=piece -> piece,
+        strip_token=strip_piece,
     )
 end
 
@@ -1405,6 +1408,9 @@ end
 
 function _write_unigram_tsv(tokenizer::UnigramTokenizer, path::String)::Nothing
     open(path, "w") do io
+        println(io, "# keemena_subwords_unigram_tsv=1")
+        println(io, "# whitespace_marker=", tokenizer.whitespace_marker)
+
         for id in 1:length(tokenizer.vocab.id_to_token)
             token = tokenizer.vocab.id_to_token[id]
             score = tokenizer.logprobs[id]

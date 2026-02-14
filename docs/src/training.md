@@ -24,6 +24,7 @@ train_bpe_result
 train_bytebpe
 train_bytebpe_result
 train_unigram
+train_unigram_result
 train_wordpiece
 train_sentencepiece
 ```
