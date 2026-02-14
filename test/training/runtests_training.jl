@@ -7,6 +7,7 @@
     include("test_bytebpe_training_edge_cases.jl")
     include("test_unigram_training_e2e.jl")
     include("test_unigram_training_offsets.jl")
+    include("test_unigram_training_unknown_offsets.jl")
     include("test_unigram_training_edge_cases.jl")
     include("test_wordpiece_training_e2e.jl")
     include("test_wordpiece_training_offsets.jl")
@@ -14,5 +15,7 @@
     include("test_wordpiece_training_edge_cases.jl")
     include("test_sentencepiece_training_e2e.jl")
     include("test_sentencepiece_training_offsets.jl")
+    include("test_sentencepiece_training_unknown_offsets.jl")
+    include("test_sentencepiece_training_longform_smoke.jl")
     include("test_sentencepiece_training_edge_cases.jl")
 end

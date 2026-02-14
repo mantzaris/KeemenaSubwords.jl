@@ -104,10 +104,18 @@ end
 
     outdir = mktempdir()
     save_tokenizer(tokenizer, outdir)
+    reloaded_auto = load_tokenizer(outdir; format=:auto)
+    @test reloaded_auto isa SentencePieceTokenizer
     reloaded = load_tokenizer(outdir; format=:sentencepiece_model)
     @test reloaded isa SentencePieceTokenizer
 
     for text in samples
+        @test tokenize(reloaded_auto, text) == tokenize(tokenizer, text)
+        @test encode(reloaded_auto, text; add_special_tokens=false) == encode(tokenizer, text; add_special_tokens=false)
+        @test encode(reloaded_auto, text; add_special_tokens=true) == encode(tokenizer, text; add_special_tokens=true)
+        @test decode(reloaded_auto, encode(reloaded_auto, text; add_special_tokens=true)) ==
+              decode(tokenizer, encode(tokenizer, text; add_special_tokens=true))
+
         @test tokenize(reloaded, text) == tokenize(tokenizer, text)
         @test encode(reloaded, text; add_special_tokens=true) == encode(tokenizer, text; add_special_tokens=true)
         @test decode(reloaded, encode(reloaded, text; add_special_tokens=true)) ==
