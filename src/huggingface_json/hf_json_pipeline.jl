@@ -572,7 +572,11 @@ function _apply_hf_decoder(
     tokenizer::HuggingFaceJSONTokenizer,
 )::String
     _ = tokenizer
-    return strip(replace(text, decoder.replacement => " "))
+    decoded = replace(text, decoder.replacement => " ")
+    if decoder.add_prefix_space
+        return strip(decoded)
+    end
+    return decoded
 end
 
 function _apply_hf_decoder(

@@ -43,6 +43,10 @@ Current scope note:
 - `TemplateProcessing` is emitted in canonical HF JSON shape (`single`/`pair`
   object items and object-map `special_tokens`) for better external HF
   compatibility.
+- Byte-level export writes explicit `ByteLevel` options
+  (`add_prefix_space=false`, `trim_offsets=false`, `use_regex=false`) for
+  Keemena ByteBPE interoperability, so Python/Rust HF loaders do not silently
+  fall back to different defaults.
 
 ## Detection Notes
 

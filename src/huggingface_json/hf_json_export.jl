@@ -132,12 +132,25 @@ _hf_export_pretokenizer(::HFNoopPreTokenizer) = nothing
 _hf_export_pretokenizer(::WordPieceTokenizer) = Dict("type" => "WhitespaceSplit")
 _hf_export_pretokenizer(::BPETokenizer) = Dict("type" => "WhitespaceSplit")
 
+function _hf_export_bytelevel_dict(
+    add_prefix_space::Bool,
+    trim_offsets::Bool,
+    use_regex::Bool,
+)::Dict{String,Any}
+    return Dict(
+        "type" => "ByteLevel",
+        "add_prefix_space" => add_prefix_space,
+        "trim_offsets" => trim_offsets,
+        "use_regex" => use_regex,
+    )
+end
+
 function _hf_export_pretokenizer(::ByteBPETokenizer)
     return Dict(
         "type" => "Sequence",
         "pretokenizers" => Any[
             Dict("type" => "WhitespaceSplit"),
-            Dict("type" => "ByteLevel", "add_prefix_space" => false),
+            _hf_export_bytelevel_dict(false, false, false),
         ],
     )
 end
@@ -154,9 +167,10 @@ function _hf_export_pretokenizer(tokenizer::SentencePieceTokenizer)
 end
 
 function _hf_export_pretokenizer(pre::HFByteLevelPreTokenizer)
-    return Dict(
-        "type" => "ByteLevel",
-        "add_prefix_space" => pre.add_prefix_space,
+    return _hf_export_bytelevel_dict(
+        pre.add_prefix_space,
+        pre.trim_offsets,
+        pre.use_regex,
     )
 end
 
@@ -237,7 +251,13 @@ function _hf_export_postprocessor(tokenizer::AbstractSubwordTokenizer)
 end
 
 _hf_export_postprocessor(::HFNoopPostProcessor) = nothing
-_hf_export_postprocessor(::HFByteLevelPostProcessor) = Dict("type" => "ByteLevel")
+function _hf_export_postprocessor(post::HFByteLevelPostProcessor)
+    return Dict(
+        "type" => "ByteLevel",
+        "add_prefix_space" => post.add_prefix_space,
+        "trim_offsets" => post.trim_offsets,
+    )
+end
 
 function _hf_export_postprocessor(post::HFBertProcessingPostProcessor)
     return Dict(
@@ -384,10 +404,22 @@ end
 
 _hf_export_decoder(tokenizer::HuggingFaceJSONTokenizer) = _hf_export_decoder(tokenizer.decoder)
 _hf_export_decoder(::HFNoopDecoder) = nothing
-_hf_export_decoder(::HFByteLevelDecoder) = Dict("type" => "ByteLevel")
+function _hf_export_decoder(decoder::HFByteLevelDecoder)
+    return _hf_export_bytelevel_dict(
+        decoder.add_prefix_space,
+        decoder.trim_offsets,
+        decoder.use_regex,
+    )
+end
 _hf_export_decoder(decoder::HFWordPieceDecoder) = Dict("type" => "WordPiece", "prefix" => decoder.prefix)
 _hf_export_decoder(decoder::HFBPEDecoder) = Dict("type" => "BPEDecoder", "suffix" => decoder.suffix)
-_hf_export_decoder(decoder::HFMetaspaceDecoder) = Dict("type" => "Metaspace", "replacement" => decoder.replacement)
+function _hf_export_decoder(decoder::HFMetaspaceDecoder)
+    return Dict(
+        "type" => "Metaspace",
+        "replacement" => decoder.replacement,
+        "add_prefix_space" => decoder.add_prefix_space,
+    )
+end
 
 function _hf_export_decoder(decoder::HFSequenceDecoder)
     return Dict(
@@ -419,7 +451,7 @@ function _hf_export_decoder(tokenizer::ByteBPETokenizer)
     if marker !== nothing
         push!(parts, Dict("type" => "BPEDecoder", "suffix" => marker))
     end
-    push!(parts, Dict("type" => "ByteLevel"))
+    push!(parts, _hf_export_bytelevel_dict(false, false, false))
 
     if length(parts) == 1
         return only(parts)

@@ -690,6 +690,12 @@ function _hf_local_model_offsets(
     pre === nothing && return nothing
 
     if pre isa HFNoopPreTokenizer || pre isa HFWhitespacePreTokenizer
+        if tokenizer.model isa HFBPEModelSpec &&
+           tokenizer.model.byte_fallback &&
+           tokenizer.base isa BPETokenizer
+            fallback_offsets = _hf_bpe_byte_fallback_offsets(tokenizer, text, tokens)
+            fallback_offsets !== nothing && return fallback_offsets
+        end
         return _token_offsets_for_tokens(tokenizer.base, text, tokens, ids)
     elseif pre isa HFByteLevelPreTokenizer
         pretokenized = _apply_hf_pretokenizer(pre, text)
@@ -702,6 +708,72 @@ function _hf_local_model_offsets(
     end
 
     return nothing
+end
+
+function _hf_bpe_byte_fallback_offsets(
+    tokenizer::HuggingFaceJSONTokenizer,
+    text::String,
+    tokens::Vector{String},
+)::Union{Nothing,Vector{Tuple{Int,Int}}}
+    model = tokenizer.model
+    base = tokenizer.base
+    (model isa HFBPEModelSpec && base isa BPETokenizer) || return nothing
+
+    bpe_model = model::HFBPEModelSpec
+    bpe = base::BPETokenizer
+    offsets = Tuple{Int,Int}[]
+    token_idx = 1
+
+    for (start_idx, _, word) in _word_spans(text)
+        word_text = String(word)
+        word_ids = _encode_hf_bpe_segment(bpe, bpe_model, word_text)
+        word_pieces = String[id_to_token(bpe, id) for id in word_ids]
+        token_idx + length(word_pieces) - 1 <= length(tokens) || return nothing
+
+        local_end = _advance_codeunits(start_idx, ncodeunits(word_text))
+        cursor = start_idx
+
+        for piece in word_pieces
+            current = tokens[token_idx]
+            current == piece || return nothing
+
+            if piece == bpe.unk_token
+                push!(offsets, (start_idx, local_end))
+                cursor = local_end
+                token_idx += 1
+                continue
+            end
+
+            piece_nbytes = _hf_bpe_piece_nbytes(piece, bpe.end_of_word_marker)
+            piece_nbytes === nothing && return nothing
+            next_cursor = _advance_codeunits(cursor, piece_nbytes)
+            next_cursor <= local_end || return nothing
+            push!(offsets, (cursor, next_cursor))
+            cursor = next_cursor
+            token_idx += 1
+        end
+
+        cursor <= local_end || return nothing
+    end
+
+    token_idx == length(tokens) + 1 || return nothing
+    return offsets
+end
+
+function _hf_bpe_piece_nbytes(
+    piece::String,
+    end_of_word_marker::Union{Nothing,String},
+)::Union{Nothing,Int}
+    clean = end_of_word_marker === nothing ? piece : replace(piece, end_of_word_marker => "")
+    isempty(clean) && return 0
+
+    if ncodeunits(clean) == 6 && startswith(clean, "<0x") && endswith(clean, ">")
+        hex = String(SubString(clean, 4, 5))
+        all(isxdigit, hex) || return nothing
+        return 1
+    end
+
+    return ncodeunits(clean)
 end
 
 function _hf_effective_pretokenizer_for_offsets(

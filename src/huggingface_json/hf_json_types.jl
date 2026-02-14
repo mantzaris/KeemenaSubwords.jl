@@ -48,6 +48,8 @@ abstract type HFJSONPreTokenizer end
 struct HFNoopPreTokenizer <: HFJSONPreTokenizer end
 struct HFByteLevelPreTokenizer <: HFJSONPreTokenizer
     add_prefix_space::Bool
+    trim_offsets::Bool
+    use_regex::Bool
 end
 struct HFWhitespacePreTokenizer <: HFJSONPreTokenizer end
 struct HFMetaspacePreTokenizer <: HFJSONPreTokenizer
@@ -70,7 +72,10 @@ end
 
 abstract type HFJSONPostProcessor end
 struct HFNoopPostProcessor <: HFJSONPostProcessor end
-struct HFByteLevelPostProcessor <: HFJSONPostProcessor end
+struct HFByteLevelPostProcessor <: HFJSONPostProcessor
+    add_prefix_space::Bool
+    trim_offsets::Bool
+end
 struct HFTemplateProcessingPostProcessor <: HFJSONPostProcessor
     single::Vector{String}
     pair::Vector{String}
@@ -94,12 +99,17 @@ end
 
 abstract type HFJSONDecoder end
 struct HFNoopDecoder <: HFJSONDecoder end
-struct HFByteLevelDecoder <: HFJSONDecoder end
+struct HFByteLevelDecoder <: HFJSONDecoder
+    add_prefix_space::Bool
+    trim_offsets::Bool
+    use_regex::Bool
+end
 struct HFWordPieceDecoder <: HFJSONDecoder
     prefix::String
 end
 struct HFMetaspaceDecoder <: HFJSONDecoder
     replacement::String
+    add_prefix_space::Bool
 end
 struct HFBPEDecoder <: HFJSONDecoder
     suffix::String

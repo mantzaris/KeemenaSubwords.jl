@@ -164,8 +164,10 @@ function _parse_hf_pretokenizer(pre_obj, path::String)::HFJSONPreTokenizer
     type_name = _json_get_required_string(pre_obj, "type", "$path.type")
 
     if type_name == "ByteLevel"
-        add_prefix_space = _json_get_bool(pre_obj, "add_prefix_space", false)
-        return HFByteLevelPreTokenizer(add_prefix_space)
+        add_prefix_space = _json_get_bool(pre_obj, "add_prefix_space", true)
+        trim_offsets = _json_get_bool(pre_obj, "trim_offsets", true)
+        use_regex = _json_get_bool(pre_obj, "use_regex", true)
+        return HFByteLevelPreTokenizer(add_prefix_space, trim_offsets, use_regex)
     elseif type_name in ("Whitespace", "WhitespaceSplit")
         return HFWhitespacePreTokenizer()
     elseif type_name == "Metaspace"
@@ -217,7 +219,9 @@ function _parse_hf_postprocessor(post_obj, path::String)::HFJSONPostProcessor
         )
         return HFTemplateProcessingPostProcessor(single, pair, specials)
     elseif type_name == "ByteLevel"
-        return HFByteLevelPostProcessor()
+        add_prefix_space = _json_get_bool(post_obj, "add_prefix_space", true)
+        trim_offsets = _json_get_bool(post_obj, "trim_offsets", true)
+        return HFByteLevelPostProcessor(add_prefix_space, trim_offsets)
     elseif type_name == "BertProcessing"
         cls_token, cls_id = _parse_token_id_pair(_json_get_required(post_obj, "cls", "$path.cls"), "$path.cls")
         sep_token, sep_id = _parse_token_id_pair(_json_get_required(post_obj, "sep", "$path.sep"), "$path.sep")
@@ -246,7 +250,10 @@ function _parse_hf_decoder(decoder_obj, path::String)::HFJSONDecoder
     type_name = _json_get_required_string(decoder_obj, "type", "$path.type")
 
     if type_name == "ByteLevel"
-        return HFByteLevelDecoder()
+        add_prefix_space = _json_get_bool(decoder_obj, "add_prefix_space", true)
+        trim_offsets = _json_get_bool(decoder_obj, "trim_offsets", true)
+        use_regex = _json_get_bool(decoder_obj, "use_regex", true)
+        return HFByteLevelDecoder(add_prefix_space, trim_offsets, use_regex)
     elseif type_name == "WordPiece"
         prefix = _json_get_string(decoder_obj, "prefix", "##")
         return HFWordPieceDecoder(prefix)
@@ -255,7 +262,8 @@ function _parse_hf_decoder(decoder_obj, path::String)::HFJSONDecoder
         return HFBPEDecoder(suffix)
     elseif type_name == "Metaspace"
         replacement = _json_get_string(decoder_obj, "replacement", "▁")
-        return HFMetaspaceDecoder(replacement)
+        add_prefix_space = _json_get_bool(decoder_obj, "add_prefix_space", true)
+        return HFMetaspaceDecoder(replacement, add_prefix_space)
     elseif type_name == "Sequence"
         items_any = _json_get_required(decoder_obj, "decoders", "$path.decoders")
         _json_is_array(items_any) || throw(ArgumentError("Decoder sequence must be an array at $path.decoders"))

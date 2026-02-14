@@ -21,6 +21,47 @@ function _json_is_array(value)::Bool
     return value !== nothing && (value isa AbstractVector || occursin("JSON3.Array", string(typeof(value))))
 end
 
+function _assert_explicit_bytelevel_options(
+    component,
+    path::String;
+    context::Symbol,
+)::Nothing
+    component === nothing && return nothing
+    _json_is_object(component) || return nothing
+    _json_has_key(component, "type") || return nothing
+
+    type_name = String(_json_get(component, "type"))
+    if type_name == "ByteLevel"
+        @test _json_has_key(component, "add_prefix_space")
+        @test _json_has_key(component, "trim_offsets")
+        if context != :post_processor
+            @test _json_has_key(component, "use_regex")
+        end
+    elseif type_name == "Sequence"
+        child_key = if context == :pre_tokenizer
+            "pretokenizers"
+        elseif context == :decoder
+            "decoders"
+        else
+            "processors"
+        end
+
+        if _json_has_key(component, child_key)
+            children = _json_get(component, child_key)
+            @test _json_is_array(children)
+            for (i, child) in enumerate(children)
+                _assert_explicit_bytelevel_options(
+                    child,
+                    "$path.$child_key[$i]";
+                    context=context,
+                )
+            end
+        end
+    end
+
+    return nothing
+end
+
 function _assert_exported_hf_json_sanity(tokenizer_json_path::String)::Nothing
     root = JSON3.read(read(tokenizer_json_path, String))
     model = _json_get(root, "model")
@@ -66,6 +107,22 @@ function _assert_exported_hf_json_sanity(tokenizer_json_path::String)::Nothing
             end
         end
     end
+
+    _assert_explicit_bytelevel_options(
+        _json_get(root, "pre_tokenizer"),
+        "\$.pre_tokenizer";
+        context=:pre_tokenizer,
+    )
+    _assert_explicit_bytelevel_options(
+        _json_get(root, "decoder"),
+        "\$.decoder";
+        context=:decoder,
+    )
+    _assert_explicit_bytelevel_options(
+        _json_get(root, "post_processor"),
+        "\$.post_processor";
+        context=:post_processor,
+    )
 
     return nothing
 end
@@ -374,6 +431,120 @@ end
                 ids_map = encode(tokenizer_map, text; add_special_tokens=add_special_tokens)
                 @test ids_map == ids_array
                 @test decode(tokenizer_map, ids_map) == decode(tokenizer_array, ids_array)
+            end
+        end
+    end
+
+    @testset "Special token span contract in HF pipelines" begin
+        tokenizer = load_tokenizer(
+            fixture("hf_json_special_spans", "tokenizer.json");
+            format=:hf_tokenizer_json,
+        )
+
+        text = "xx [SPECIAL] yy"
+        tokenization_text = tokenization_view(tokenizer, text)
+        result = encode_result(
+            tokenizer,
+            tokenization_text;
+            assume_normalized=true,
+            add_special_tokens=false,
+            return_offsets=true,
+            return_masks=true,
+        )
+
+        @test result.offsets !== nothing
+        @test result.special_tokens_mask !== nothing
+        @test_nowarn assert_offsets_contract(
+            tokenization_text,
+            result.offsets;
+            require_string_boundaries=true,
+        )
+        @test offsets_are_nonoverlapping(
+            result.offsets;
+            ignore_sentinel=true,
+            ignore_empty=true,
+        )
+
+        special_id = token_to_id(tokenizer, "[SPECIAL]")
+        special_indices = findall(==(special_id), result.ids)
+        @test !isempty(special_indices)
+
+        spanful_special_idx = findfirst(i -> has_nonempty_span(result.offsets[i]), special_indices)
+        @test spanful_special_idx !== nothing
+        idx = special_indices[(spanful_special_idx::Int)]
+        @test result.special_tokens_mask[idx] == 1
+        @test result.offsets[idx] != offsets_sentinel()
+        @test try_span_substring(tokenization_text, result.offsets[idx]) == "[SPECIAL]"
+
+        with_inserted = encode_result(
+            tokenizer,
+            tokenization_text;
+            assume_normalized=true,
+            add_special_tokens=true,
+            return_offsets=true,
+            return_masks=true,
+        )
+
+        @test with_inserted.offsets !== nothing
+        @test with_inserted.special_tokens_mask !== nothing
+        cls_id = token_to_id(tokenizer, "[CLS]")
+        sep_id = token_to_id(tokenizer, "[SEP]")
+
+        for cls_idx in findall(==(cls_id), with_inserted.ids)
+            @test with_inserted.special_tokens_mask[cls_idx] == 1
+            @test with_inserted.offsets[cls_idx] == offsets_sentinel()
+        end
+        for sep_idx in findall(==(sep_id), with_inserted.ids)
+            @test with_inserted.special_tokens_mask[sep_idx] == 1
+            @test with_inserted.offsets[sep_idx] == offsets_sentinel()
+        end
+    end
+
+    @testset "HF byte_fallback multibyte offsets contract" begin
+        tokenizer = load_tokenizer(
+            fixture("hf_json_byte_fallback", "tokenizer.json");
+            format=:hf_tokenizer_json,
+        )
+
+        texts = [
+            "€",
+            "🤖",
+            "mix € and 🤖",
+        ]
+
+        for text in texts
+            tokenization_text = tokenization_view(tokenizer, text)
+            result = encode_result(
+                tokenizer,
+                tokenization_text;
+                assume_normalized=true,
+                add_special_tokens=false,
+                return_offsets=true,
+                return_masks=true,
+            )
+
+            @test result.offsets !== nothing
+            @test_nowarn assert_offsets_contract(
+                tokenization_text,
+                result.offsets;
+                require_string_boundaries=false,
+            )
+            @test offsets_are_nonoverlapping(
+                result.offsets;
+                ignore_sentinel=true,
+                ignore_empty=true,
+            )
+
+            max_stop = ncodeunits(tokenization_text) + 1
+            for offset in result.offsets
+                if !has_span(offset)
+                    @test offset == offsets_sentinel()
+                    continue
+                end
+                start_idx, stop_idx = offset
+                @test 1 <= start_idx <= stop_idx <= max_stop
+                has_nonempty_span(offset) || continue
+                @test_nowarn span_codeunits(tokenization_text, offset)
             end
         end
     end
