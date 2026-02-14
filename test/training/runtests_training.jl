@@ -12,5 +12,7 @@
     include("test_wordpiece_training_offsets.jl")
     include("test_wordpiece_training_unknown_offsets.jl")
     include("test_wordpiece_training_edge_cases.jl")
-    include("test_training_stubs.jl")
+    include("test_sentencepiece_training_e2e.jl")
+    include("test_sentencepiece_training_offsets.jl")
+    include("test_sentencepiece_training_edge_cases.jl")
 end

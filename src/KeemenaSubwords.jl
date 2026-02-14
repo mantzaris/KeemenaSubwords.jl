@@ -23,7 +23,8 @@ using .Training: train_bpe,
     train_unigram_result,
     train_wordpiece,
     train_wordpiece_result,
-    train_sentencepiece
+    train_sentencepiece,
+    train_sentencepiece_result
 include("io.jl")
 
 export AbstractSubwordTokenizer,
@@ -109,6 +110,7 @@ export AbstractSubwordTokenizer,
        train_wordpiece,
        train_wordpiece_result,
        train_sentencepiece,
+       train_sentencepiece_result,
        save_tokenizer,
        export_tokenizer
 

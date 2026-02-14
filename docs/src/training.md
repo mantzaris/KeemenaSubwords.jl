@@ -13,9 +13,8 @@ Available now:
 - `train_unigram(...)`
 - `train_wordpiece(...)`
 - `train_wordpiece_result(...)`
-
-Planned (stub entrypoints):
 - `train_sentencepiece(...)`
+- `train_sentencepiece_result(...)`
 
 ## Training API
 
@@ -29,6 +28,7 @@ train_unigram_result
 train_wordpiece
 train_wordpiece_result
 train_sentencepiece
+train_sentencepiece_result
 ```
 
 ## Note on pretokenizer
@@ -43,8 +43,8 @@ train_sentencepiece
   use `format=:bytebpe` if format auto-detection is ambiguous.
 
 Current behavior:
-- SentencePiece training remains a discoverability stub and currently throws a
-  clear `ArgumentError` because training is not yet implemented.
+- SentencePiece training supports both `model_type=:unigram` and
+  `model_type=:bpe`.
 - Unigram training defaults to SentencePiece-style `whitespace_marker="▁"` so
   multi-word text can round-trip through `decode(encode(...))`.
 - If `whitespace_marker=""`, runtime Unigram tokenization is still word-split,

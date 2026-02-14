@@ -231,20 +231,71 @@ function train_wordpiece_result(
 end
 
 """
-Optional SentencePiece training entry point.
-
-This API is reserved for a later iteration.
+Train a SentencePiece tokenizer.
 """
 function train_sentencepiece(
     corpus;
     vocab_size::Int,
     model_type::Symbol=:unigram,
     special_tokens::Dict{Symbol,String}=Dict(:unk => "<unk>", :pad => "<pad>"),
+    pretokenizer::Union{Nothing,Function}=nothing,
+    whitespace_marker::String="▁",
+    model_name::String="trained_sentencepiece",
+    version::VersionNumber=v"0.3.0",
+    seed_size::Int=200_000,
+    num_iters::Int=5,
+    max_subword_length::Int=6,
+    prune_fraction::Float64=0.2,
+    min_frequency::Int=2,
 )::SentencePieceTokenizer
-    return _train_sentencepiece_impl(
+    return train_sentencepiece_result(
         corpus;
         vocab_size=vocab_size,
         model_type=model_type,
         special_tokens=special_tokens,
+        pretokenizer=pretokenizer,
+        whitespace_marker=whitespace_marker,
+        model_name=model_name,
+        version=version,
+        seed_size=seed_size,
+        num_iters=num_iters,
+        max_subword_length=max_subword_length,
+        prune_fraction=prune_fraction,
+        min_frequency=min_frequency,
+    ).tokenizer
+end
+
+"""
+Train a SentencePiece tokenizer and return model artifacts.
+"""
+function train_sentencepiece_result(
+    corpus;
+    vocab_size::Int,
+    model_type::Symbol=:unigram,
+    special_tokens::Dict{Symbol,String}=Dict(:unk => "<unk>", :pad => "<pad>"),
+    pretokenizer::Union{Nothing,Function}=nothing,
+    whitespace_marker::String="▁",
+    model_name::String="trained_sentencepiece",
+    version::VersionNumber=v"0.3.0",
+    seed_size::Int=200_000,
+    num_iters::Int=5,
+    max_subword_length::Int=6,
+    prune_fraction::Float64=0.2,
+    min_frequency::Int=2,
+)::TrainingResult{SentencePieceTokenizer,SentencePieceTrainingConfig,SentencePieceTrainingArtifacts}
+    config = SentencePieceTrainingConfig(
+        vocab_size,
+        model_type,
+        min_frequency,
+        seed_size,
+        num_iters,
+        max_subword_length,
+        prune_fraction,
+        _normalize_special_tokens(special_tokens),
+        pretokenizer,
+        String(whitespace_marker),
+        String(model_name),
+        version,
     )
+    return _train_sentencepiece_result_impl(corpus, config)
 end

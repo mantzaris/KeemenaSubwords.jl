@@ -139,6 +139,30 @@ function _validate_wordpiece_config(config::WordPieceTrainingConfig)::Nothing
     return nothing
 end
 
+function _validate_sentencepiece_config(config::SentencePieceTrainingConfig)::Nothing
+    _validate_positive(config.vocab_size, "vocab_size")
+    config.model_type in (:unigram, :bpe) || throw(ArgumentError(
+        "model_type must be :unigram or :bpe",
+    ))
+    _validate_nonempty(config.whitespace_marker, "whitespace_marker")
+    _validate_nonempty(config.model_name, "model_name")
+    haskey(config.special_tokens, :unk) || throw(ArgumentError("special_tokens must include :unk"))
+    _validate_nonempty(config.special_tokens[:unk], "special_tokens[:unk]")
+
+    if config.model_type == :bpe
+        _validate_positive(config.min_frequency, "min_frequency")
+    else
+        _validate_positive(config.seed_size, "seed_size")
+        _validate_positive(config.num_iters, "num_iters")
+        _validate_positive(config.max_subword_length, "max_subword_length")
+        (0.0 <= config.prune_fraction < 1.0) || throw(ArgumentError(
+            "prune_fraction must be in [0, 1)",
+        ))
+    end
+
+    return nothing
+end
+
 function _validate_required_vocab_capacity(
     vocab_size::Int,
     required_tokens::Vector{String},

@@ -78,3 +78,24 @@ struct WordPieceTrainingArtifacts <: AbstractTrainingArtifacts
     merge_scores::Vector{Float64}
     word_counts::Dict{String,Int}
 end
+
+struct SentencePieceTrainingConfig <: AbstractTrainingConfig
+    vocab_size::Int
+    model_type::Symbol
+    min_frequency::Int
+    seed_size::Int
+    num_iters::Int
+    max_subword_length::Int
+    prune_fraction::Float64
+    special_tokens::Dict{Symbol,String}
+    pretokenizer::Union{Nothing,Function}
+    whitespace_marker::String
+    model_name::String
+    version::VersionNumber
+end
+
+struct SentencePieceTrainingArtifacts <: AbstractTrainingArtifacts
+    model_type::Symbol
+    whitespace_marker::String
+    inner_artifacts::Union{UnigramTrainingArtifacts,BPETrainingArtifacts}
+end
