@@ -107,3 +107,48 @@ end
     @test encode(reloaded, sample; add_special_tokens=true) == original_ids
     @test decode(reloaded, original_ids) == sample
 end
+
+@testset "Unigram sentencepiece export/load parity" begin
+    corpus = [
+        "hello, world!",
+        "café costs €5",
+        "markers keep spacing",
+    ]
+
+    training = train_unigram_result(
+        corpus;
+        vocab_size=96,
+        seed_size=800,
+        num_iters=2,
+        max_subword_length=8,
+        prune_fraction=0.2,
+        special_tokens=Dict(
+            :unk => "<UNK>",
+            :pad => "<PAD>",
+            :bos => "<s>",
+            :eos => "</s>",
+        ),
+        whitespace_marker="▁",
+        model_name="training_unigram_spm_export",
+    )
+    tokenizer = training.tokenizer
+
+    outdir = mktempdir()
+    export_tokenizer(tokenizer, outdir; format=:sentencepiece_model)
+    spm_path = joinpath(outdir, "spm.model")
+    @test isfile(spm_path)
+
+    reloaded = load_tokenizer(spm_path; format=:sentencepiece_model)
+    @test reloaded isa SentencePieceTokenizer
+
+    samples = [
+        "hello, world!",
+        "café costs €5",
+    ]
+    for text in samples
+        @test tokenize(reloaded, text) == tokenize(tokenizer, text)
+        @test encode(reloaded, text; add_special_tokens=false) == encode(tokenizer, text; add_special_tokens=false)
+        @test decode(reloaded, encode(reloaded, text; add_special_tokens=true)) ==
+              decode(tokenizer, encode(tokenizer, text; add_special_tokens=true))
+    end
+end

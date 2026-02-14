@@ -95,3 +95,38 @@ end
     ids = encode(tokenizer, text; add_special_tokens=false)
     @test decode(tokenizer, ids) == text
 end
+
+@testset "Unigram markerless whitespace is honored and persisted" begin
+    corpus = [
+        "a b",
+        "b a",
+    ]
+
+    training = train_unigram_result(
+        corpus;
+        vocab_size=32,
+        seed_size=100,
+        num_iters=2,
+        max_subword_length=4,
+        prune_fraction=0.2,
+        special_tokens=Dict(
+            :unk => "<UNK>",
+            :pad => "<PAD>",
+        ),
+        whitespace_marker="",
+        model_name="unigram_markerless_semantics",
+    )
+    tokenizer = training.tokenizer
+    @test tokenizer.whitespace_marker == ""
+
+    text = "a b"
+    ids = encode(tokenizer, text; add_special_tokens=false)
+    @test decode(tokenizer, ids) == "ab"
+
+    outdir = mktempdir()
+    save_tokenizer(tokenizer, outdir)
+    reloaded = load_tokenizer(outdir; format=:unigram)
+    @test reloaded isa UnigramTokenizer
+    @test reloaded.whitespace_marker == ""
+    @test decode(reloaded, encode(reloaded, text; add_special_tokens=false)) == "ab"
+end
