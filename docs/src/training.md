@@ -15,6 +15,8 @@ Available now:
 - `train_wordpiece_result(...)`
 - `train_sentencepiece(...)`
 - `train_sentencepiece_result(...)`
+- `train_hf_bert_wordpiece(...)`
+- `train_hf_bert_wordpiece_result(...)`
 
 ## Training API
 
@@ -29,6 +31,33 @@ train_wordpiece
 train_wordpiece_result
 train_sentencepiece
 train_sentencepiece_result
+train_hf_bert_wordpiece
+train_hf_bert_wordpiece_result
+```
+
+## HF BERT WordPiece Preset
+
+```julia
+using KeemenaSubwords
+
+corpus = [
+    "Hello, world!",
+    "Café naïve façade",
+    "你好 世界",
+]
+
+tok = train_hf_bert_wordpiece(
+    corpus;
+    vocab_size=128,
+    min_frequency=1,
+    lowercase=true,
+    strip_accents=nothing,
+    handle_chinese_chars=true,
+    clean_text=true,
+)
+
+export_tokenizer(tok, "out_hf_bert"; format=:hf_tokenizer_json)
+reloaded = load_hf_tokenizer_json("out_hf_bert/tokenizer.json")
 ```
 
 ## Note on pretokenizer

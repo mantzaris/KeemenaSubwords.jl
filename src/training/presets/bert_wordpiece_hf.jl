@@ -1,3 +1,27 @@
+"""
+    train_hf_bert_wordpiece(corpus; kwargs...) -> HuggingFaceJSONTokenizer
+
+Train a BERT-style WordPiece tokenizer and return a `HuggingFaceJSONTokenizer`
+pipeline composed of:
+- `BertNormalizer`
+- `BertPreTokenizer`
+- `BertProcessing` (CLS/SEP insertion)
+- `WordPiece` decoder
+
+Special token behavior:
+- `add_special_tokens=true` inserts `[CLS]` and `[SEP]` via post-processing.
+- Special tokens present verbatim in input text can also be matched via HF
+  `added_tokens` patterns.
+
+KeemenaPreprocessing integration:
+- `tokenization_text = tokenization_view(tokenizer, clean_text)`
+- `encode_result(tokenizer, tokenization_text; assume_normalized=true,
+  return_offsets=true, return_masks=true)`
+
+Export/reload flow:
+- `export_tokenizer(tokenizer, out_dir; format=:hf_tokenizer_json)`
+- `load_hf_tokenizer_json(joinpath(out_dir, "tokenizer.json"))`
+"""
 function train_hf_bert_wordpiece(
     corpus;
     vocab_size::Int,
@@ -34,6 +58,19 @@ function train_hf_bert_wordpiece(
     ).tokenizer
 end
 
+"""
+    train_hf_bert_wordpiece_result(corpus; kwargs...) ->
+        TrainingResult{HuggingFaceJSONTokenizer,BertWordPieceTrainingConfig,BertWordPieceTrainingArtifacts}
+
+Train a BERT-style WordPiece tokenizer and return:
+- `tokenizer::HuggingFaceJSONTokenizer`
+- `config::BertWordPieceTrainingConfig`
+- `artifacts::BertWordPieceTrainingArtifacts`
+
+The returned tokenizer includes `BertNormalizer`, `BertPreTokenizer`,
+`BertProcessing`, and `WordPiece` decoding, with special tokens exported as HF
+`added_tokens` for deterministic save/reload parity.
+"""
 function train_hf_bert_wordpiece_result(
     corpus;
     vocab_size::Int,

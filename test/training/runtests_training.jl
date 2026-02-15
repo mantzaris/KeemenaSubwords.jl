@@ -15,6 +15,7 @@
     include("test_wordpiece_training_edge_cases.jl")
     include("test_hf_bert_wordpiece_training_e2e.jl")
     include("test_hf_bert_wordpiece_training_offsets.jl")
+    include("test_hf_bert_wordpiece_training_export_shape.jl")
     include("test_sentencepiece_training_e2e.jl")
     include("test_sentencepiece_training_offsets.jl")
     include("test_sentencepiece_training_unknown_offsets.jl")
