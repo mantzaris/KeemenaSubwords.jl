@@ -27,7 +27,9 @@ using .Training: train_bpe,
     train_sentencepiece,
     train_sentencepiece_result,
     train_hf_bert_wordpiece,
-    train_hf_bert_wordpiece_result
+    train_hf_bert_wordpiece_result,
+    train_hf_roberta_bytebpe,
+    train_hf_roberta_bytebpe_result
 include("io.jl")
 
 export AbstractSubwordTokenizer,
@@ -116,6 +118,8 @@ export AbstractSubwordTokenizer,
        train_sentencepiece_result,
        train_hf_bert_wordpiece,
        train_hf_bert_wordpiece_result,
+       train_hf_roberta_bytebpe,
+       train_hf_roberta_bytebpe_result,
        save_tokenizer,
        export_tokenizer
 

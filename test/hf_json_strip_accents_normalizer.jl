@@ -17,6 +17,7 @@ using JSON3
             "vocab" => Dict(
                 "[UNK]" => 0,
                 "Cafe" => 1,
+                "a" => 2,
             ),
         ),
         "added_tokens" => Any[
@@ -41,10 +42,15 @@ using JSON3
     tokenizer = load_hf_tokenizer_json(tokenizer_path)
     @test tokenizer isa HuggingFaceJSONTokenizer
     @test normalize(tokenizer, "Café") == "Cafe"
+    @test normalize(tokenizer, "a\u20DD") == "a"
 
     ids = encode(tokenizer, "Café"; add_special_tokens=false)
     @test ids == [token_to_id(tokenizer, "Cafe")]
     @test decode(tokenizer, ids) == "Cafe"
+
+    enclosed_ids = encode(tokenizer, "a\u20DD"; add_special_tokens=false)
+    @test enclosed_ids == [token_to_id(tokenizer, "a")]
+    @test decode(tokenizer, enclosed_ids) == "a"
 
     tokenization_text = tokenization_view(tokenizer, "Café")
     result = encode_result(

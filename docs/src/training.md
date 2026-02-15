@@ -17,6 +17,8 @@ Available now:
 - `train_sentencepiece_result(...)`
 - `train_hf_bert_wordpiece(...)`
 - `train_hf_bert_wordpiece_result(...)`
+- `train_hf_roberta_bytebpe(...)`
+- `train_hf_roberta_bytebpe_result(...)`
 
 ## Training API
 
@@ -33,6 +35,8 @@ train_sentencepiece
 train_sentencepiece_result
 train_hf_bert_wordpiece
 train_hf_bert_wordpiece_result
+train_hf_roberta_bytebpe
+train_hf_roberta_bytebpe_result
 ```
 
 ## HF BERT WordPiece Preset
@@ -58,6 +62,30 @@ tok = train_hf_bert_wordpiece(
 
 export_tokenizer(tok, "out_hf_bert"; format=:hf_tokenizer_json)
 reloaded = load_hf_tokenizer_json("out_hf_bert/tokenizer.json")
+```
+
+## HF RoBERTa ByteBPE Preset
+
+```julia
+using KeemenaSubwords
+
+corpus = [
+    "hello world",
+    "hello, world!",
+    "café costs 5 euros",
+]
+
+tok = train_hf_roberta_bytebpe(
+    corpus;
+    vocab_size=384,
+    min_frequency=1,
+    add_prefix_space=false,
+    trim_offsets=false,
+    use_regex=false,
+)
+
+export_tokenizer(tok, "out_hf_roberta"; format=:hf_tokenizer_json)
+reloaded = load_hf_tokenizer_json("out_hf_roberta/tokenizer.json")
 ```
 
 ## Note on pretokenizer

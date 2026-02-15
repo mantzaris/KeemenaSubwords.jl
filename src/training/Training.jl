@@ -7,10 +7,19 @@ import ..KeemenaSubwords: BPETokenizer,
     SentencePieceTokenizer,
     HuggingFaceJSONTokenizer,
     TokenizerMetadata,
+    HFBPEModelSpec,
+    HFJSONNormalizer,
     HFWordPieceModelSpec,
+    HFNoopNormalizer,
+    HFLowercaseNormalizer,
+    HFNFKCNormalizer,
+    HFSequenceNormalizer,
     HFBertNormalizer,
     HFBertPreTokenizer,
+    HFByteLevelPreTokenizer,
     HFBertProcessingPostProcessor,
+    HFRobertaProcessingPostProcessor,
+    HFByteLevelDecoder,
     HFWordPieceDecoder,
     HFAddedToken,
     _apply_hf_normalizer,
@@ -29,6 +38,7 @@ include("unigram_train.jl")
 include("wordpiece_train.jl")
 include("sentencepiece_train.jl")
 include("presets/bert_wordpiece_hf.jl")
+include("presets/roberta_bytebpe_hf.jl")
 
 export AbstractTrainingConfig,
     AbstractTrainingArtifacts,
@@ -45,6 +55,8 @@ export AbstractTrainingConfig,
     SentencePieceTrainingArtifacts,
     BertWordPieceTrainingConfig,
     BertWordPieceTrainingArtifacts,
+    RobertaByteBPETrainingConfig,
+    RobertaByteBPETrainingArtifacts,
     train_bpe,
     train_bpe_result,
     train_bytebpe,
@@ -56,6 +68,8 @@ export AbstractTrainingConfig,
     train_sentencepiece,
     train_sentencepiece_result,
     train_hf_bert_wordpiece,
-    train_hf_bert_wordpiece_result
+    train_hf_bert_wordpiece_result,
+    train_hf_roberta_bytebpe,
+    train_hf_roberta_bytebpe_result
 
 end # module Training

@@ -184,6 +184,25 @@ function _validate_hf_bert_wordpiece_config(
     return nothing
 end
 
+function _validate_hf_roberta_bytebpe_config(
+    config::RobertaByteBPETrainingConfig,
+)::Nothing
+    _validate_positive(config.vocab_size, "vocab_size")
+    _validate_positive(config.min_frequency, "min_frequency")
+    _validate_nonempty(config.end_of_word_marker, "end_of_word_marker")
+    _validate_nonempty(config.model_name, "model_name")
+
+    required_special_keys = (:unk, :pad, :bos, :eos)
+    for key in required_special_keys
+        haskey(config.special_tokens, key) || throw(ArgumentError(
+            "special_tokens must include :$key",
+        ))
+        _validate_nonempty(config.special_tokens[key], "special_tokens[:$key]")
+    end
+
+    return nothing
+end
+
 function _validate_required_vocab_capacity(
     vocab_size::Int,
     required_tokens::Vector{String},

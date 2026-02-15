@@ -118,3 +118,22 @@ struct BertWordPieceTrainingArtifacts <: AbstractTrainingArtifacts
     inner::WordPieceTrainingArtifacts
     hf_added_tokens::Vector{HFAddedToken}
 end
+
+struct RobertaByteBPETrainingConfig <: AbstractTrainingConfig
+    vocab_size::Int
+    min_frequency::Int
+    special_tokens::Dict{Symbol,String}
+    end_of_word_marker::String
+    add_prefix_space::Bool
+    trim_offsets::Bool
+    use_regex::Bool
+    nfkc::Bool
+    lowercase::Bool
+    model_name::String
+    version::VersionNumber
+end
+
+struct RobertaByteBPETrainingArtifacts <: AbstractTrainingArtifacts
+    inner::ByteBPETrainingArtifacts
+    hf_added_tokens::Vector{HFAddedToken}
+end
