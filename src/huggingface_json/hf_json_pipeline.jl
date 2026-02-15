@@ -400,7 +400,7 @@ end
 
 function _apply_hf_normalizer(::HFStripAccentsNormalizer, text::String)::String
     decomposed = Base.Unicode.normalize(text, :NFD)
-    return replace(decomposed, r"\\p{M}+" => "")
+    return replace(decomposed, r"\p{Mn}+" => "")
 end
 
 function _apply_hf_normalizer(normalizer::HFBertNormalizer, text::String)::String

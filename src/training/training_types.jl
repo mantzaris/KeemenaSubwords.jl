@@ -99,3 +99,22 @@ struct SentencePieceTrainingArtifacts <: AbstractTrainingArtifacts
     whitespace_marker::String
     inner_artifacts::Union{UnigramTrainingArtifacts,BPETrainingArtifacts}
 end
+
+struct BertWordPieceTrainingConfig <: AbstractTrainingConfig
+    vocab_size::Int
+    min_frequency::Int
+    special_tokens::Dict{Symbol,String}
+    continuation_prefix::String
+    max_input_chars_per_word::Int
+    clean_text::Bool
+    handle_chinese_chars::Bool
+    lowercase::Bool
+    strip_accents::Union{Nothing,Bool}
+    model_name::String
+    version::VersionNumber
+end
+
+struct BertWordPieceTrainingArtifacts <: AbstractTrainingArtifacts
+    inner::WordPieceTrainingArtifacts
+    hf_added_tokens::Vector{HFAddedToken}
+end

@@ -18,30 +18,61 @@ function load_hf_tokenizer_json(
     model = _with_hf_added_tokens(spec.model, spec.added_token_ids)
     model = _with_hf_bytelevel_flag(model, spec)
     base = _build_hf_json_base_tokenizer(model; model_name=name)
-
-    token_special_ids = copy(spec.special_token_ids)
-    special_ids = _derive_symbol_special_ids(base, token_special_ids)
-    metadata = TokenizerMetadata(:hf_tokenizer_json, name, v"0.5.0", :hf_json)
-    special_patterns, raw_patterns, normalized_patterns = _build_added_token_patterns(spec.added_tokens, spec.normalizer)
-
-    return HuggingFaceJSONTokenizer(
+    return _build_hf_tokenizer_from_parts(
         model,
         base,
         spec.normalizer,
         spec.pretokenizer,
         spec.postprocessor,
-        spec.decoder,
-        spec.added_tokens,
+        spec.decoder;
+        added_tokens=spec.added_tokens,
+        truncation=spec.truncation,
+        padding=spec.padding,
+        model_name=name,
+        version=v"0.5.0",
+        source_path=spec.source_path,
+    )
+end
+
+function _build_hf_tokenizer_from_parts(
+    model::HFJSONModelSpec,
+    base::AbstractSubwordTokenizer,
+    normalizer::HFJSONNormalizer,
+    pretokenizer::HFJSONPreTokenizer,
+    postprocessor::HFJSONPostProcessor,
+    decoder::HFJSONDecoder;
+    added_tokens::Vector{HFAddedToken}=HFAddedToken[],
+    truncation::Union{Nothing,NamedTuple}=nothing,
+    padding::Union{Nothing,NamedTuple}=nothing,
+    model_name::AbstractString,
+    version::VersionNumber,
+    source_path::AbstractString="<trained>",
+)::HuggingFaceJSONTokenizer
+    added_token_ids = Dict{String,Int}(token.content => token.id for token in added_tokens)
+    token_special_ids = Dict{String,Int}(token.content => token.id for token in added_tokens if token.special)
+    _merge_template_special_ids!(token_special_ids, postprocessor)
+    special_ids = _derive_symbol_special_ids(base, token_special_ids)
+    special_patterns, raw_patterns, normalized_patterns = _build_added_token_patterns(added_tokens, normalizer)
+    metadata = TokenizerMetadata(:hf_tokenizer_json, String(model_name), version, :hf_json)
+
+    return HuggingFaceJSONTokenizer(
+        model,
+        base,
+        normalizer,
+        pretokenizer,
+        postprocessor,
+        decoder,
+        added_tokens,
         special_patterns,
         raw_patterns,
         normalized_patterns,
-        spec.added_token_ids,
+        added_token_ids,
         token_special_ids,
         special_ids,
-        spec.truncation,
-        spec.padding,
+        truncation,
+        padding,
         metadata,
-        spec.source_path,
+        String(source_path),
     )
 end
 

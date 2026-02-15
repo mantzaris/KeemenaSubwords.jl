@@ -549,6 +549,7 @@ end
     end
 
     include("training/runtests_training.jl")
+    include("hf_json_strip_accents_normalizer.jl")
     include("hf_json_export_roundtrip.jl")
     include("hf_json_bert_components.jl")
 

@@ -163,6 +163,27 @@ function _validate_sentencepiece_config(config::SentencePieceTrainingConfig)::No
     return nothing
 end
 
+function _validate_hf_bert_wordpiece_config(
+    config::BertWordPieceTrainingConfig,
+)::Nothing
+    _validate_positive(config.vocab_size, "vocab_size")
+    _validate_positive(config.min_frequency, "min_frequency")
+    _validate_nonempty(config.continuation_prefix, "continuation_prefix")
+    _validate_nonempty(config.model_name, "model_name")
+    config.max_input_chars_per_word >= 0 || throw(ArgumentError(
+        "max_input_chars_per_word must be >= 0",
+    ))
+
+    haskey(config.special_tokens, :unk) || throw(ArgumentError("special_tokens must include :unk"))
+    haskey(config.special_tokens, :cls) || throw(ArgumentError("special_tokens must include :cls"))
+    haskey(config.special_tokens, :sep) || throw(ArgumentError("special_tokens must include :sep"))
+    _validate_nonempty(config.special_tokens[:unk], "special_tokens[:unk]")
+    _validate_nonempty(config.special_tokens[:cls], "special_tokens[:cls]")
+    _validate_nonempty(config.special_tokens[:sep], "special_tokens[:sep]")
+
+    return nothing
+end
+
 function _validate_required_vocab_capacity(
     vocab_size::Int,
     required_tokens::Vector{String},
