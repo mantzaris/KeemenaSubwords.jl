@@ -12,6 +12,7 @@ jobs:
   CompatHelper:
     runs-on: ubuntu-latest
     env:
+      JULIA_PKG_SERVER: ""
       JULIA_PKG_SERVER_REGISTRY_PREFERENCE: conservative
     steps:
       - uses: julia-actions/setup-julia@v2
@@ -28,10 +29,11 @@ jobs:
             mkpath(depot)
             general_dir = joinpath(depot, "registries", "General")
             registry_toml = joinpath(general_dir, "Registry.toml")
+            packed_registry_toml = joinpath(depot, "registries", "General.toml")
 
             function ensure_general()
-                if isfile(registry_toml)
-                    println("General registry already present: ", general_dir)
+                if isfile(registry_toml) || isfile(packed_registry_toml)
+                    println("General registry already present in depot: ", depot)
                     return
                 end
                 mkpath(dirname(general_dir))

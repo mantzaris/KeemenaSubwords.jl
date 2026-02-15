@@ -22,6 +22,7 @@ jobs:
     timeout-minutes: 60
     env:
       KEEMENA_TEST_DOWNLOADS: "0"
+      JULIA_PKG_SERVER: ""
       JULIA_PKG_SERVER_REGISTRY_PREFERENCE: conservative
     permissions:
       actions: write
@@ -53,10 +54,11 @@ jobs:
             mkpath(depot)
             general_dir = joinpath(depot, "registries", "General")
             registry_toml = joinpath(general_dir, "Registry.toml")
+            packed_registry_toml = joinpath(depot, "registries", "General.toml")
 
             function ensure_general()
-                if isfile(registry_toml)
-                    println("General registry already present: ", general_dir)
+                if isfile(registry_toml) || isfile(packed_registry_toml)
+                    println("General registry already present in depot: ", depot)
                     return
                 end
                 mkpath(dirname(general_dir))
@@ -93,6 +95,7 @@ jobs:
     timeout-minutes: 60
     env:
       KEEMENA_TEST_DOWNLOADS: "1"
+      JULIA_PKG_SERVER: ""
       JULIA_PKG_SERVER_REGISTRY_PREFERENCE: conservative
     permissions:
       actions: write
@@ -121,10 +124,11 @@ jobs:
             mkpath(depot)
             general_dir = joinpath(depot, "registries", "General")
             registry_toml = joinpath(general_dir, "Registry.toml")
+            packed_registry_toml = joinpath(depot, "registries", "General.toml")
 
             function ensure_general()
-                if isfile(registry_toml)
-                    println("General registry already present: ", general_dir)
+                if isfile(registry_toml) || isfile(packed_registry_toml)
+                    println("General registry already present in depot: ", depot)
                     return
                 end
                 mkpath(dirname(general_dir))
@@ -153,6 +157,7 @@ jobs:
     name: Documentation
     runs-on: ubuntu-latest
     env:
+      JULIA_PKG_SERVER: ""
       JULIA_PKG_SERVER_REGISTRY_PREFERENCE: conservative
     permissions:
       actions: write
@@ -174,10 +179,11 @@ jobs:
             mkpath(depot)
             general_dir = joinpath(depot, "registries", "General")
             registry_toml = joinpath(general_dir, "Registry.toml")
+            packed_registry_toml = joinpath(depot, "registries", "General.toml")
 
             function ensure_general()
-                if isfile(registry_toml)
-                    println("General registry already present: ", general_dir)
+                if isfile(registry_toml) || isfile(packed_registry_toml)
+                    println("General registry already present in depot: ", depot)
                     return
                 end
                 mkpath(dirname(general_dir))
