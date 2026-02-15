@@ -200,7 +200,8 @@ function _build_hf_json_base_tokenizer(
     model::HFBPEModelSpec;
     model_name::String,
 )::AbstractSubwordTokenizer
-    special_map = detect_special_tokens(model.vocab, model.unk_token)
+    unk_token_string = _resolve_hf_bpe_unk_token(model)
+    special_map = detect_special_tokens(model.vocab, unk_token_string)
     vocab = build_vocab(model.vocab; special_tokens=special_map)
 
     pair_ranks = Dict{Tuple{String,String},Int}()
@@ -210,7 +211,7 @@ function _build_hf_json_base_tokenizer(
 
     end_marker = model.end_of_word_suffix
     base_meta = TokenizerMetadata(:bpe_gpt2, model_name, v"0.5.0", :none)
-    bpe = BPETokenizer(vocab, pair_ranks, model.unk_token, end_marker, base_meta)
+    bpe = BPETokenizer(vocab, pair_ranks, unk_token_string, end_marker, base_meta)
 
     if model.byte_level
         b2u, u2b = _byte_unicode_tables()
@@ -219,6 +220,23 @@ function _build_hf_json_base_tokenizer(
     end
 
     return bpe
+end
+
+function _resolve_hf_bpe_unk_token(model::HFBPEModelSpec)::String
+    unk_token = model.unk_token
+    if unk_token !== nothing
+        return String(unk_token)
+    end
+
+    for candidate in ("<|endoftext|>", "[UNK]")
+        candidate in model.vocab && return candidate
+    end
+
+    throw(ArgumentError(
+        "BPE model has unk_token=null and no fallback token could be inferred. " *
+        "Add an unk token such as \"<|endoftext|>\" or \"[UNK]\" to the vocabulary, " *
+        "or set model.unk_token explicitly.",
+    ))
 end
 
 function _build_hf_json_base_tokenizer(

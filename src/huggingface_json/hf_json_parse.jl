@@ -62,7 +62,7 @@ function _parse_hf_model(model_obj, path::String)::HFJSONModelSpec
     if type_name == "bpe"
         vocab = _parse_vocab_map(_json_get_required(model_obj, "vocab", "$path.vocab"), "$path.vocab")
         merges = _parse_merges(_json_get_required(model_obj, "merges", "$path.merges"), "$path.merges")
-        unk_token = _json_get_string(model_obj, "unk_token", "<unk>")
+        unk_token = _json_get_nullable_string(model_obj, "unk_token"; default="<unk>")
         continuing_prefix = _json_get_optional_string(model_obj, "continuing_subword_prefix")
         end_suffix = _json_get_string(model_obj, "end_of_word_suffix", "")
         suffix = isempty(end_suffix) ? nothing : end_suffix
@@ -589,6 +589,18 @@ function _json_get_optional_string(obj, key::String)::Union{Nothing,String}
     text = String(value)
     isempty(text) && return nothing
     return text
+end
+
+function _json_get_nullable_string(
+    obj,
+    key::String;
+    default::Union{Nothing,String}=nothing,
+)::Union{Nothing,String}
+    _json_haskey(obj, key) || return default
+    value = _json_get(obj, key)
+    value === nothing && return nothing
+    value isa AbstractString || throw(ArgumentError("Expected string/null at field '$key'"))
+    return String(value)
 end
 
 function _json_get_required_string(obj, key::String, path::String)::String

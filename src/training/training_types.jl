@@ -137,3 +137,21 @@ struct RobertaByteBPETrainingArtifacts <: AbstractTrainingArtifacts
     inner::ByteBPETrainingArtifacts
     hf_added_tokens::Vector{HFAddedToken}
 end
+
+struct GPT2ByteBPETrainingConfig <: AbstractTrainingConfig
+    vocab_size::Int
+    min_frequency::Int
+    special_tokens::Dict{Symbol,String}
+    end_of_word_marker::String
+    add_prefix_space::Bool
+    trim_offsets::Bool
+    use_regex::Bool
+    export_unk_token_null::Bool
+    model_name::String
+    version::VersionNumber
+end
+
+struct GPT2ByteBPETrainingArtifacts <: AbstractTrainingArtifacts
+    inner::ByteBPETrainingArtifacts
+    hf_added_tokens::Vector{HFAddedToken}
+end

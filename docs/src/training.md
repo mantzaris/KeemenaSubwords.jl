@@ -19,6 +19,8 @@ Available now:
 - `train_hf_bert_wordpiece_result(...)`
 - `train_hf_roberta_bytebpe(...)`
 - `train_hf_roberta_bytebpe_result(...)`
+- `train_hf_gpt2_bytebpe(...)`
+- `train_hf_gpt2_bytebpe_result(...)`
 
 ## Training API
 
@@ -37,6 +39,8 @@ train_hf_bert_wordpiece
 train_hf_bert_wordpiece_result
 train_hf_roberta_bytebpe
 train_hf_roberta_bytebpe_result
+train_hf_gpt2_bytebpe
+train_hf_gpt2_bytebpe_result
 ```
 
 ## HF BERT WordPiece Preset
@@ -92,6 +96,26 @@ RoBERTa preset defaults are chosen for HF-style ByteLevel behavior:
   offsets contract:
   non-span specials use sentinel `(0,0)`, while trimmed real tokens may become
   empty but remain in-bounds spans like `(k,k)` (never sentinel).
+
+## HF GPT-2 ByteBPE Preset
+
+```julia
+using KeemenaSubwords
+
+corpus = [
+    "Hello my friend, how is your day going?",
+    "café 🙂",
+]
+
+tok = train_hf_gpt2_bytebpe(
+    corpus;
+    vocab_size=384,
+    min_frequency=1,
+)
+
+export_tokenizer(tok, "out_hf_gpt2"; format=:hf_tokenizer_json)
+reloaded = load_hf_tokenizer_json("out_hf_gpt2/tokenizer.json")
+```
 
 ## Note on pretokenizer
 

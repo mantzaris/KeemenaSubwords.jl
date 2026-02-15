@@ -3,7 +3,7 @@ abstract type HFJSONModelSpec end
 struct HFBPEModelSpec <: HFJSONModelSpec
     vocab::Vector{String}
     merges::Vector{Tuple{String,String}}
-    unk_token::String
+    unk_token::Union{Nothing,String}
     byte_level::Bool
     continuing_subword_prefix::Union{Nothing,String}
     end_of_word_suffix::Union{Nothing,String}

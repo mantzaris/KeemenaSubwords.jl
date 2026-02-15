@@ -79,9 +79,12 @@ function _assert_exported_hf_json_sanity(tokenizer_json_path::String)::Nothing
         @test ids == collect(0:(length(ids) - 1))
 
         if _json_has_key(model, "unk_token")
-            unk_token = String(_json_get(model, "unk_token"))
-            @test _json_has_key(vocab, unk_token)
-            @test Int(_json_get(vocab, unk_token)) in ids
+            unk_token_any = _json_get(model, "unk_token")
+            if unk_token_any !== nothing
+                unk_token = String(unk_token_any)
+                @test _json_has_key(vocab, unk_token)
+                @test Int(_json_get(vocab, unk_token)) in ids
+            end
         end
     end
 

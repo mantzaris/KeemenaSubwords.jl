@@ -17,6 +17,7 @@ import ..KeemenaSubwords: BPETokenizer,
     HFBertNormalizer,
     HFBertPreTokenizer,
     HFByteLevelPreTokenizer,
+    HFByteLevelPostProcessor,
     HFBertProcessingPostProcessor,
     HFRobertaProcessingPostProcessor,
     HFByteLevelDecoder,
@@ -40,6 +41,7 @@ include("wordpiece_train.jl")
 include("sentencepiece_train.jl")
 include("presets/bert_wordpiece_hf.jl")
 include("presets/roberta_bytebpe_hf.jl")
+include("presets/gpt2_bytebpe_hf.jl")
 
 export AbstractTrainingConfig,
     AbstractTrainingArtifacts,
@@ -58,6 +60,8 @@ export AbstractTrainingConfig,
     BertWordPieceTrainingArtifacts,
     RobertaByteBPETrainingConfig,
     RobertaByteBPETrainingArtifacts,
+    GPT2ByteBPETrainingConfig,
+    GPT2ByteBPETrainingArtifacts,
     train_bpe,
     train_bpe_result,
     train_bytebpe,
@@ -71,6 +75,8 @@ export AbstractTrainingConfig,
     train_hf_bert_wordpiece,
     train_hf_bert_wordpiece_result,
     train_hf_roberta_bytebpe,
-    train_hf_roberta_bytebpe_result
+    train_hf_roberta_bytebpe_result,
+    train_hf_gpt2_bytebpe,
+    train_hf_gpt2_bytebpe_result
 
 end # module Training
