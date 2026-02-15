@@ -27,13 +27,25 @@ function encode(
         if seg.kind == :added
             push!(ids, seg.id)
         else
-            pretokenized = _apply_hf_pretokenizer(tokenizer.pretokenizer, seg.text)
-            append!(ids, _encode_hf_model_segment(tokenizer, pretokenized))
+            append!(ids, _encode_hf_text_segment(tokenizer, seg.text))
         end
     end
 
     add_special_tokens || return ids
     return _apply_hf_postprocessor(tokenizer.postprocessor, ids, tokenizer)
+end
+
+function _encode_hf_text_segment(
+    tokenizer::HuggingFaceJSONTokenizer,
+    text::String,
+)::Vector{Int}
+    effective_pre = _hf_effective_pretokenizer_for_offsets(tokenizer.pretokenizer)
+    if effective_pre isa HFByteLevelPreTokenizer
+        return _encode_hf_bytelevel_segment(tokenizer, text, effective_pre)
+    end
+
+    pretokenized = _apply_hf_pretokenizer(tokenizer.pretokenizer, text)
+    return _encode_hf_model_segment(tokenizer, pretokenized)
 end
 
 function decode(tokenizer::HuggingFaceJSONTokenizer, ids::AbstractVector{Int})::String
@@ -245,6 +257,53 @@ function _encode_hf_model_segment(
     end
 
     return encode(base, text; add_special_tokens=false)
+end
+
+function _encode_hf_bytelevel_segment(
+    tokenizer::HuggingFaceJSONTokenizer,
+    text::String,
+    pre::HFByteLevelPreTokenizer,
+)::Vector{Int}
+    if !pre.use_regex
+        pretokenized = _apply_hf_pretokenizer(pre, text)
+        return _encode_hf_model_segment(tokenizer, pretokenized)
+    end
+
+    if tokenizer.base isa ByteBPETokenizer
+        base = tokenizer.base::ByteBPETokenizer
+        if !_hf_bytelevel_can_split(base)
+            pretokenized = _apply_hf_pretokenizer(pre, text)
+            return _encode_hf_model_segment(tokenizer, pretokenized)
+        end
+
+        raw_splits, _ = _hf_bytelevel_raw_splits_with_work_spans(
+            text;
+            add_prefix_space=pre.add_prefix_space,
+            use_regex=pre.use_regex,
+        )
+        ids = Int[]
+        for split in raw_splits
+            append!(ids, _encode_hf_bytelevel_piece(base, split.piece))
+        end
+        return ids
+    end
+
+    pretokenized = _apply_hf_pretokenizer(pre, text)
+    return _encode_hf_model_segment(tokenizer, pretokenized)
+end
+
+function _hf_bytelevel_can_split(tokenizer::ByteBPETokenizer)::Bool
+    byte_space = string(tokenizer.byte_to_unicode[Int(UInt8(' ')) + 1])
+    return haskey(tokenizer.base.vocab.token_to_id, byte_space)
+end
+
+function _encode_hf_bytelevel_piece(
+    tokenizer::ByteBPETokenizer,
+    piece::String,
+)::Vector{Int}
+    isempty(piece) && return Int[]
+    merged_tokens = _tokenize_byte_word(tokenizer, piece)
+    return Int[token_to_id(tokenizer, token) for token in merged_tokens]
 end
 
 function _encode_hf_bpe_segment(
@@ -507,6 +566,90 @@ function _apply_hf_pretokenizer(::HFBertPreTokenizer, text::String)::String
     return join([piece.piece for piece in pieces], " ")
 end
 
+const _HF_BYTELEVEL_GPT2_REGEX = Regex(
+    "'s|'t|'re|'ve|'m|'ll|'d| ?\\p{L}+| ?\\p{N}+| ?[^\\s\\p{L}\\p{N}]+|\\s+(?!\\S)|\\s+",
+)
+
+function _hf_bytelevel_raw_splits_with_work_spans(
+    text::String;
+    add_prefix_space::Bool,
+    use_regex::Bool,
+)::Tuple{
+    Vector{NamedTuple{(:piece, :start, :stop),Tuple{String,Int,Int}}},
+    Bool,
+}
+    prefix_added = add_prefix_space && !isempty(text) && !startswith(text, " ")
+    working = prefix_added ? " " * text : text
+    splits = NamedTuple{(:piece, :start, :stop),Tuple{String,Int,Int}}[]
+
+    isempty(working) && return (splits, prefix_added)
+
+    if use_regex
+        for match in eachmatch(_HF_BYTELEVEL_GPT2_REGEX, working)
+            piece = String(match.match)
+            start_idx = match.offset
+            stop_idx = start_idx + ncodeunits(piece)
+            push!(splits, (piece=piece, start=start_idx, stop=stop_idx))
+        end
+    else
+        stop_idx = ncodeunits(working) + offsets_index_base()
+        push!(splits, (piece=working, start=offsets_index_base(), stop=stop_idx))
+    end
+
+    return (splits, prefix_added)
+end
+
+function _hf_bytelevel_map_piece(piece::String)::String
+    byte_to_unicode, _ = _byte_unicode_tables()
+    mapped = IOBuffer()
+    for byte in codeunits(piece)
+        write(mapped, byte_to_unicode[Int(byte) + 1])
+    end
+    return String(take!(mapped))
+end
+
+function _hf_bytelevel_work_span_to_original(
+    start_idx::Int,
+    stop_idx::Int;
+    prefix_added::Bool,
+    max_stop::Int,
+)::Tuple{Int,Int}
+    shift = prefix_added ? 1 : 0
+    base = offsets_index_base()
+
+    mapped_start = clamp(start_idx - shift, base, max_stop)
+    mapped_stop = clamp(stop_idx - shift, base, max_stop)
+    mapped_stop < mapped_start && (mapped_stop = mapped_start)
+    return (mapped_start, mapped_stop)
+end
+
+function _hf_bytelevel_pretokenize_with_spans(
+    text::String;
+    add_prefix_space::Bool,
+    use_regex::Bool,
+)::Vector{Tuple{String,Tuple{Int,Int}}}
+    raw_splits, prefix_added = _hf_bytelevel_raw_splits_with_work_spans(
+        text;
+        add_prefix_space=add_prefix_space,
+        use_regex=use_regex,
+    )
+    max_stop = ncodeunits(text) + offsets_index_base()
+    out = Tuple{String,Tuple{Int,Int}}[]
+
+    for split in raw_splits
+        mapped_piece = _hf_bytelevel_map_piece(split.piece)
+        mapped_span = _hf_bytelevel_work_span_to_original(
+            split.start,
+            split.stop;
+            prefix_added=prefix_added,
+            max_stop=max_stop,
+        )
+        push!(out, (mapped_piece, mapped_span))
+    end
+
+    return out
+end
+
 function _apply_hf_pretokenizer(pre::HFByteLevelPreTokenizer, text::String)::String
     if pre.add_prefix_space && !isempty(text) && !startswith(text, " ")
         return " " * text
@@ -753,4 +896,200 @@ function _hf_bert_offsets(
 
     token_idx == length(tokens) + 1 || return nothing
     return offsets
+end
+
+function _hf_bytelevel_piece_offsets(
+    tokenizer::ByteBPETokenizer,
+    piece::String,
+    piece_tokens::Vector{String},
+)::Union{Nothing,Vector{Tuple{Int,Int}}}
+    offsets = Tuple{Int,Int}[]
+    cursor = offsets_index_base()
+    piece_end = ncodeunits(piece) + offsets_index_base()
+
+    for token in piece_tokens
+        if token == tokenizer.base.unk_token
+            push!(offsets, (offsets_index_base(), piece_end))
+            cursor = piece_end
+            continue
+        end
+
+        piece_bytes = _bytebpe_piece_nbytes(tokenizer, token)
+        piece_bytes === nothing && return nothing
+        next_cursor = _advance_codeunits(cursor, piece_bytes)
+        next_cursor <= piece_end || return nothing
+        push!(offsets, (cursor, next_cursor))
+        cursor = next_cursor
+    end
+
+    cursor <= piece_end || return nothing
+    return offsets
+end
+
+function _hf_bytelevel_offsets(
+    tokenizer::HuggingFaceJSONTokenizer,
+    text::String,
+    tokens::Vector{String},
+    ids::Vector{Int},
+    pre::HFByteLevelPreTokenizer,
+)::Union{Nothing,Vector{Tuple{Int,Int}}}
+    if !pre.use_regex
+        pretokenized = _apply_hf_pretokenizer(pre, text)
+        base_offsets = _token_offsets_for_tokens(tokenizer.base, pretokenized, tokens, ids)
+        base_offsets === nothing && return nothing
+        shift = pre.add_prefix_space && !isempty(text) && !startswith(text, " ") ? -1 : 0
+        return shift == 0 ? base_offsets : _shift_offsets(base_offsets, shift)
+    end
+
+    if tokenizer.base isa ByteBPETokenizer
+        base = tokenizer.base::ByteBPETokenizer
+        if !_hf_bytelevel_can_split(base)
+            pretokenized = _apply_hf_pretokenizer(pre, text)
+            base_offsets = _token_offsets_for_tokens(base, pretokenized, tokens, ids)
+            base_offsets === nothing && return nothing
+            shift = pre.add_prefix_space && !isempty(text) && !startswith(text, " ") ? -1 : 0
+            return shift == 0 ? base_offsets : _shift_offsets(base_offsets, shift)
+        end
+    end
+
+    raw_splits, prefix_added = _hf_bytelevel_raw_splits_with_work_spans(
+        text;
+        add_prefix_space=pre.add_prefix_space,
+        use_regex=pre.use_regex,
+    )
+
+    offsets = Tuple{Int,Int}[]
+    token_idx = 1
+    max_stop = ncodeunits(text) + offsets_index_base()
+
+    for split in raw_splits
+        piece_ids, piece_tokens, local_offsets = if tokenizer.base isa ByteBPETokenizer
+            bytebpe = tokenizer.base::ByteBPETokenizer
+            split_ids = _encode_hf_bytelevel_piece(bytebpe, split.piece)
+            split_tokens = String[id_to_token(tokenizer, id) for id in split_ids]
+            split_offsets = _hf_bytelevel_piece_offsets(bytebpe, split.piece, split_tokens)
+            split_offsets === nothing && return nothing
+            (split_ids, split_tokens, split_offsets)
+        else
+            pretokenized = _apply_hf_pretokenizer(pre, split.piece)
+            split_ids = _encode_hf_model_segment(tokenizer, pretokenized)
+            split_tokens = String[id_to_token(tokenizer, id) for id in split_ids]
+            split_offsets = _token_offsets_for_tokens(
+                tokenizer.base,
+                pretokenized,
+                split_tokens,
+                split_ids,
+            )
+            split_offsets === nothing && return nothing
+            (split_ids, split_tokens, split_offsets)
+        end
+
+        length(piece_ids) == length(piece_tokens) == length(local_offsets) || return nothing
+        token_idx + length(piece_ids) - 1 <= length(tokens) || return nothing
+
+        for i in eachindex(piece_ids)
+            tokens[token_idx] == piece_tokens[i] || return nothing
+            ids[token_idx] == piece_ids[i] || return nothing
+
+            local_start, local_stop = local_offsets[i]
+            work_start = split.start + local_start - offsets_index_base()
+            work_stop = split.start + local_stop - offsets_index_base()
+            global_offset = _hf_bytelevel_work_span_to_original(
+                work_start,
+                work_stop;
+                prefix_added=prefix_added,
+                max_stop=max_stop,
+            )
+            push!(offsets, global_offset)
+            token_idx += 1
+        end
+    end
+
+    token_idx == length(tokens) + 1 || return nothing
+    return offsets
+end
+
+function _hf_bytelevel_trim_options(post::HFJSONPostProcessor)::Tuple{Bool,Bool}
+    return (false, false)
+end
+
+function _hf_bytelevel_trim_options(post::HFByteLevelPostProcessor)::Tuple{Bool,Bool}
+    return (post.trim_offsets, post.add_prefix_space)
+end
+
+function _hf_bytelevel_trim_options(post::HFRobertaProcessingPostProcessor)::Tuple{Bool,Bool}
+    return (post.trim_offsets, post.add_prefix_space)
+end
+
+function _hf_bytelevel_trim_options(post::HFSequencePostProcessor)::Tuple{Bool,Bool}
+    for item in post.items
+        enabled, add_prefix_space = _hf_bytelevel_trim_options(item)
+        enabled && return (enabled, add_prefix_space)
+    end
+    return (false, false)
+end
+
+function _hf_bytelevel_space_char(tokenizer::HuggingFaceJSONTokenizer)::Char
+    if tokenizer.base isa ByteBPETokenizer
+        bytebpe = tokenizer.base::ByteBPETokenizer
+        return bytebpe.byte_to_unicode[Int(UInt8(' ')) + 1]
+    end
+
+    byte_to_unicode, _ = _byte_unicode_tables()
+    return byte_to_unicode[Int(UInt8(' ')) + 1]
+end
+
+function _hf_bytelevel_is_trim_space(c::Char, byte_space_char::Char)::Bool
+    return c == byte_space_char || isspace(c)
+end
+
+function _hf_bytelevel_trim_offsets!(
+    tokens::Vector{String},
+    offsets::Vector{Tuple{Int,Int}};
+    add_prefix_space::Bool,
+    byte_space_char::Char,
+    original_text::Union{Nothing,String}=nothing,
+)::Nothing
+    length(tokens) == length(offsets) || return nothing
+    base = offsets_index_base()
+    first_input_is_space = original_text !== nothing &&
+        !isempty(original_text) &&
+        isspace(original_text[firstindex(original_text)])
+
+    for i in eachindex(tokens)
+        start_idx, stop_idx = offsets[i]
+        has_span((start_idx, stop_idx)) || continue
+
+        token = tokens[i]
+        token_chars = collect(token)
+        isempty(token_chars) && continue
+
+        leading = 0
+        trailing = 0
+
+        while leading < length(token_chars) &&
+              _hf_bytelevel_is_trim_space(token_chars[leading + 1], byte_space_char)
+            leading += 1
+        end
+
+        while trailing < (length(token_chars) - leading) &&
+              _hf_bytelevel_is_trim_space(token_chars[length(token_chars) - trailing], byte_space_char)
+            trailing += 1
+        end
+
+        if add_prefix_space &&
+           i == 1 &&
+           leading > 0 &&
+           start_idx == base &&
+           !first_input_is_space &&
+           token_chars[1] == byte_space_char
+            leading -= 1
+        end
+
+        trimmed_start = min(start_idx + leading, stop_idx)
+        trimmed_stop = max(stop_idx - trailing, trimmed_start)
+        offsets[i] = (trimmed_start, trimmed_stop)
+    end
+
+    return nothing
 end

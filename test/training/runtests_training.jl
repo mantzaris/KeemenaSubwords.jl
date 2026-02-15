@@ -20,6 +20,7 @@
     include("test_hf_roberta_bytebpe_training_offsets.jl")
     include("test_hf_roberta_bytebpe_training_export_reload.jl")
     include("test_hf_roberta_bytebpe_training_export_shape.jl")
+    include("test_hf_roberta_bytebpe_training_regex_trim_e2e.jl")
     include("test_sentencepiece_training_e2e.jl")
     include("test_sentencepiece_training_offsets.jl")
     include("test_sentencepiece_training_unknown_offsets.jl")

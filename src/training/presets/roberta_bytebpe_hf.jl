@@ -11,6 +11,8 @@ Special token behavior:
 - `add_special_tokens=true` inserts BOS/EOS via RobertaProcessing.
 - Special tokens present verbatim in input text can be matched via HF
   `added_tokens` patterns.
+- By default the preset enables HF-style ByteLevel settings:
+  `use_regex=true`, `add_prefix_space=true`, and `trim_offsets=true`.
 
 KeemenaPreprocessing integration:
 - `tokenization_text = tokenization_view(tokenizer, clean_text)`
@@ -33,9 +35,9 @@ function train_hf_roberta_bytebpe(
         :mask => "<mask>",
     ),
     end_of_word_marker::String="</w>",
-    add_prefix_space::Bool=false,
-    trim_offsets::Bool=false,
-    use_regex::Bool=false,
+    add_prefix_space::Bool=true,
+    trim_offsets::Bool=true,
+    use_regex::Bool=true,
     nfkc::Bool=false,
     lowercase::Bool=false,
     model_name::String="trained_hf_roberta_bytebpe",
@@ -81,9 +83,9 @@ function train_hf_roberta_bytebpe_result(
         :mask => "<mask>",
     ),
     end_of_word_marker::String="</w>",
-    add_prefix_space::Bool=false,
-    trim_offsets::Bool=false,
-    use_regex::Bool=false,
+    add_prefix_space::Bool=true,
+    trim_offsets::Bool=true,
+    use_regex::Bool=true,
     nfkc::Bool=false,
     lowercase::Bool=false,
     model_name::String="trained_hf_roberta_bytebpe",
@@ -120,12 +122,13 @@ function _train_hf_roberta_bytebpe_result_impl(
     _validate_hf_roberta_bytebpe_config(config)
 
     normalizer = _hf_roberta_normalizer(config)
+    training_pretokenizer = _hf_roberta_training_pretokenizer(config)
     inner_config = ByteBPETrainingConfig(
         config.vocab_size,
         config.min_frequency,
         config.special_tokens,
         config.end_of_word_marker,
-        nothing,
+        training_pretokenizer,
         true,
         config.model_name * "_inner",
         config.version,
@@ -154,7 +157,14 @@ function _train_hf_roberta_bytebpe_result_impl(
         config.trim_offsets,
         config.use_regex,
     )
-    postprocessor = HFRobertaProcessingPostProcessor(cls_token, cls_id, sep_token, sep_id)
+    postprocessor = HFRobertaProcessingPostProcessor(
+        cls_token,
+        cls_id,
+        sep_token,
+        sep_id,
+        config.trim_offsets,
+        config.add_prefix_space,
+    )
     decoder = HFByteLevelDecoder(
         config.add_prefix_space,
         config.trim_offsets,
@@ -195,6 +205,27 @@ function _hf_roberta_normalizer(
     end
 
     return HFSequenceNormalizer(items)
+end
+
+function _hf_roberta_training_pretokenizer(
+    config::RobertaByteBPETrainingConfig,
+)::Function
+    normalizer = _hf_roberta_normalizer(config)
+    return text -> begin
+        normalized = _apply_hf_normalizer(normalizer, String(text))
+        raw_splits, _ = _hf_bytelevel_raw_splits_with_work_spans(
+            normalized;
+            add_prefix_space=config.add_prefix_space,
+            use_regex=config.use_regex,
+        )
+
+        out = String[]
+        for split in raw_splits
+            isempty(split.piece) && continue
+            push!(out, split.piece)
+        end
+        return out
+    end
 end
 
 function _hf_roberta_special_added_tokens(

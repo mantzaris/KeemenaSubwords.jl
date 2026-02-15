@@ -85,6 +85,7 @@ struct HFNoopPostProcessor <: HFJSONPostProcessor end
 struct HFByteLevelPostProcessor <: HFJSONPostProcessor
     add_prefix_space::Bool
     trim_offsets::Bool
+    use_regex::Bool
 end
 struct HFTemplateProcessingPostProcessor <: HFJSONPostProcessor
     single::Vector{String}
@@ -102,6 +103,8 @@ struct HFRobertaProcessingPostProcessor <: HFJSONPostProcessor
     cls_id::Int
     sep_token::String
     sep_id::Int
+    trim_offsets::Bool
+    add_prefix_space::Bool
 end
 struct HFSequencePostProcessor <: HFJSONPostProcessor
     items::Vector{HFJSONPostProcessor}

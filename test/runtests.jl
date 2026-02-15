@@ -550,6 +550,9 @@ end
 
     include("training/runtests_training.jl")
     include("hf_json_strip_accents_normalizer.jl")
+    include("hf_json_bytelevel_regex_splits.jl")
+    include("hf_json_bytelevel_use_regex_false.jl")
+    include("hf_json_roberta_processing_trim_offsets.jl")
     include("hf_json_export_roundtrip.jl")
     include("hf_json_bert_components.jl")
 

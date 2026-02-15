@@ -266,6 +266,7 @@ function _hf_export_postprocessor(post::HFByteLevelPostProcessor)
         "type" => "ByteLevel",
         "add_prefix_space" => post.add_prefix_space,
         "trim_offsets" => post.trim_offsets,
+        "use_regex" => post.use_regex,
     )
 end
 
@@ -282,6 +283,8 @@ function _hf_export_postprocessor(post::HFRobertaProcessingPostProcessor)
         "type" => "RobertaProcessing",
         "cls" => Any[post.cls_token, post.cls_id - 1],
         "sep" => Any[post.sep_token, post.sep_id - 1],
+        "trim_offsets" => post.trim_offsets,
+        "add_prefix_space" => post.add_prefix_space,
     )
 end
 

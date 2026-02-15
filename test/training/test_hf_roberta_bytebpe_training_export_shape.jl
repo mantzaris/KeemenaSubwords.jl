@@ -79,6 +79,8 @@ end
     @test sep[1] == "</s>"
     @test cls[2] isa Integer && cls[2] >= 0
     @test sep[2] isa Integer && sep[2] >= 0
+    @test Bool(_roberta_json_get(postprocessor, "trim_offsets")) == training.config.trim_offsets
+    @test Bool(_roberta_json_get(postprocessor, "add_prefix_space")) == training.config.add_prefix_space
 
     model = _roberta_json_get(root, "model")
     @test String(_roberta_json_get(model, "type")) == "BPE"

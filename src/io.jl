@@ -521,6 +521,22 @@ function _encode_result_offsets(
     base_offsets = _hf_offsets_from_segments(tokenizer, segments, base_ids)
     base_offsets === nothing && return nothing
 
+    trim_offsets, add_prefix_from_post = _hf_bytelevel_trim_options(tokenizer.postprocessor)
+    if trim_offsets
+        base_tokens = String[id_to_token(tokenizer, id) for id in base_ids]
+        effective_pre = _hf_effective_pretokenizer_for_offsets(tokenizer.pretokenizer)
+        add_prefix_space = effective_pre isa HFByteLevelPreTokenizer ?
+            effective_pre.add_prefix_space :
+            add_prefix_from_post
+        _hf_bytelevel_trim_offsets!(
+            base_tokens,
+            base_offsets;
+            add_prefix_space=add_prefix_space,
+            byte_space_char=_hf_bytelevel_space_char(tokenizer),
+            original_text=text,
+        )
+    end
+
     if !add_special_tokens
         ids == base_ids || return nothing
         return base_offsets
@@ -654,8 +670,7 @@ function _hf_offsets_from_segments(
             continue
         end
 
-        pretokenized = _apply_hf_pretokenizer(tokenizer.pretokenizer, seg.text)
-        seg_ids = _encode_hf_model_segment(tokenizer, pretokenized)
+        seg_ids = _encode_hf_text_segment(tokenizer, seg.text)
         seg_tokens = String[id_to_token(tokenizer, id) for id in seg_ids]
         local_offsets = _hf_local_model_offsets(tokenizer, seg.text, seg_tokens, seg_ids)
         local_offsets === nothing && return nothing
@@ -700,11 +715,7 @@ function _hf_local_model_offsets(
     elseif pre isa HFBertPreTokenizer
         return _hf_bert_offsets(tokenizer, text, tokens)
     elseif pre isa HFByteLevelPreTokenizer
-        pretokenized = _apply_hf_pretokenizer(pre, text)
-        base_offsets = _token_offsets_for_tokens(tokenizer.base, pretokenized, tokens, ids)
-        base_offsets === nothing && return nothing
-        shift = pre.add_prefix_space && !isempty(text) && !startswith(text, " ") ? -1 : 0
-        return shift == 0 ? base_offsets : _shift_offsets(base_offsets, shift)
+        return _hf_bytelevel_offsets(tokenizer, text, tokens, ids, pre)
     elseif pre isa HFMetaspacePreTokenizer
         return _hf_metaspace_offsets(tokenizer, text, tokens, pre)
     end

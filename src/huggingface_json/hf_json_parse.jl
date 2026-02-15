@@ -229,7 +229,8 @@ function _parse_hf_postprocessor(post_obj, path::String)::HFJSONPostProcessor
     elseif type_name == "ByteLevel"
         add_prefix_space = _json_get_bool(post_obj, "add_prefix_space", true)
         trim_offsets = _json_get_bool(post_obj, "trim_offsets", true)
-        return HFByteLevelPostProcessor(add_prefix_space, trim_offsets)
+        use_regex = _json_get_bool(post_obj, "use_regex", true)
+        return HFByteLevelPostProcessor(add_prefix_space, trim_offsets, use_regex)
     elseif type_name == "BertProcessing"
         cls_token, cls_id = _parse_token_id_pair(_json_get_required(post_obj, "cls", "$path.cls"), "$path.cls")
         sep_token, sep_id = _parse_token_id_pair(_json_get_required(post_obj, "sep", "$path.sep"), "$path.sep")
@@ -237,7 +238,16 @@ function _parse_hf_postprocessor(post_obj, path::String)::HFJSONPostProcessor
     elseif type_name == "RobertaProcessing"
         cls_token, cls_id = _parse_token_id_pair(_json_get_required(post_obj, "cls", "$path.cls"), "$path.cls")
         sep_token, sep_id = _parse_token_id_pair(_json_get_required(post_obj, "sep", "$path.sep"), "$path.sep")
-        return HFRobertaProcessingPostProcessor(cls_token, cls_id, sep_token, sep_id)
+        trim_offsets = _json_get_bool(post_obj, "trim_offsets", true)
+        add_prefix_space = _json_get_bool(post_obj, "add_prefix_space", true)
+        return HFRobertaProcessingPostProcessor(
+            cls_token,
+            cls_id,
+            sep_token,
+            sep_id,
+            trim_offsets,
+            add_prefix_space,
+        )
     elseif type_name == "Sequence"
         items_any = _json_get_required(post_obj, "processors", "$path.processors")
         _json_is_array(items_any) || throw(ArgumentError("Post-processor sequence must be an array at $path.processors"))

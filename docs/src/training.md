@@ -79,14 +79,19 @@ tok = train_hf_roberta_bytebpe(
     corpus;
     vocab_size=384,
     min_frequency=1,
-    add_prefix_space=false,
-    trim_offsets=false,
-    use_regex=false,
 )
 
 export_tokenizer(tok, "out_hf_roberta"; format=:hf_tokenizer_json)
 reloaded = load_hf_tokenizer_json("out_hf_roberta/tokenizer.json")
 ```
+
+RoBERTa preset defaults are chosen for HF-style ByteLevel behavior:
+- `use_regex=true` applies GPT-2 ByteLevel regex splitting.
+- `add_prefix_space=true` matches RoBERTa-style leading-space handling.
+- `trim_offsets=true` trims span edges for whitespace while preserving the
+  offsets contract:
+  non-span specials use sentinel `(0,0)`, while trimmed real tokens may become
+  empty but remain in-bounds spans like `(k,k)` (never sentinel).
 
 ## Note on pretokenizer
 
