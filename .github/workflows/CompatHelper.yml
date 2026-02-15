@@ -11,10 +11,47 @@ permissions:
 jobs:
   CompatHelper:
     runs-on: ubuntu-latest
+    env:
+      JULIA_PKG_SERVER_REGISTRY_PREFERENCE: conservative
     steps:
       - uses: julia-actions/setup-julia@v2
         with:
           version: '1'
+
+      - name: Ensure General registry (git fallback)
+        shell: bash
+        run: |
+          set -euo pipefail
+          julia -e '
+            using Pkg
+            depot = DEPOT_PATH[1]
+            mkpath(depot)
+            general_dir = joinpath(depot, "registries", "General")
+            registry_toml = joinpath(general_dir, "Registry.toml")
+
+            function ensure_general()
+                if isfile(registry_toml)
+                    println("General registry already present: ", general_dir)
+                    return
+                end
+                mkpath(dirname(general_dir))
+                Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/JuliaRegistries/General.git"))
+                println("Installed General registry from GitHub.")
+            end
+
+            for attempt in 1:3
+                try
+                    ensure_general()
+                    break
+                catch err
+                    @warn "Failed to ensure General registry" attempt err
+                    if attempt == 3
+                        rethrow()
+                    end
+                    sleep(3 * attempt)
+                end
+            end
+          '
 
       - name: Install CompatHelper
         run: julia -e 'using Pkg; Pkg.add(name="CompatHelper", version="3")'

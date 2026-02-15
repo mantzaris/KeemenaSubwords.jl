@@ -22,6 +22,7 @@ jobs:
     timeout-minutes: 60
     env:
       KEEMENA_TEST_DOWNLOADS: "0"
+      JULIA_PKG_SERVER_REGISTRY_PREFERENCE: conservative
     permissions:
       actions: write
       contents: read
@@ -42,6 +43,40 @@ jobs:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
       - uses: julia-actions/cache@v2
+      - name: Ensure General registry (git fallback)
+        shell: bash
+        run: |
+          set -euo pipefail
+          julia -e '
+            using Pkg
+            depot = DEPOT_PATH[1]
+            mkpath(depot)
+            general_dir = joinpath(depot, "registries", "General")
+            registry_toml = joinpath(general_dir, "Registry.toml")
+
+            function ensure_general()
+                if isfile(registry_toml)
+                    println("General registry already present: ", general_dir)
+                    return
+                end
+                mkpath(dirname(general_dir))
+                Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/JuliaRegistries/General.git"))
+                println("Installed General registry from GitHub.")
+            end
+
+            for attempt in 1:3
+                try
+                    ensure_general()
+                    break
+                catch err
+                    @warn "Failed to ensure General registry" attempt err
+                    if attempt == 3
+                        rethrow()
+                    end
+                    sleep(3 * attempt)
+                end
+            end
+          '
       - uses: julia-actions/julia-buildpkg@v1
       - name: Verify model inventory sync
         run: julia --project=. tools/sync_readme_models.jl --check
@@ -58,6 +93,7 @@ jobs:
     timeout-minutes: 60
     env:
       KEEMENA_TEST_DOWNLOADS: "1"
+      JULIA_PKG_SERVER_REGISTRY_PREFERENCE: conservative
     permissions:
       actions: write
       contents: read
@@ -75,6 +111,40 @@ jobs:
           key: ${{ runner.os }}-keemena-model-cache-${{ hashFiles('Artifacts.toml', 'src/models.jl') }}
           restore-keys: |
             ${{ runner.os }}-keemena-model-cache-
+      - name: Ensure General registry (git fallback)
+        shell: bash
+        run: |
+          set -euo pipefail
+          julia -e '
+            using Pkg
+            depot = DEPOT_PATH[1]
+            mkpath(depot)
+            general_dir = joinpath(depot, "registries", "General")
+            registry_toml = joinpath(general_dir, "Registry.toml")
+
+            function ensure_general()
+                if isfile(registry_toml)
+                    println("General registry already present: ", general_dir)
+                    return
+                end
+                mkpath(dirname(general_dir))
+                Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/JuliaRegistries/General.git"))
+                println("Installed General registry from GitHub.")
+            end
+
+            for attempt in 1:3
+                try
+                    ensure_general()
+                    break
+                catch err
+                    @warn "Failed to ensure General registry" attempt err
+                    if attempt == 3
+                        rethrow()
+                    end
+                    sleep(3 * attempt)
+                end
+            end
+          '
       - uses: julia-actions/julia-buildpkg@v1
       - name: Run download smoke tests
         run: julia --project=. -e "using Pkg; Pkg.test()"
@@ -82,6 +152,8 @@ jobs:
   docs:
     name: Documentation
     runs-on: ubuntu-latest
+    env:
+      JULIA_PKG_SERVER_REGISTRY_PREFERENCE: conservative
     permissions:
       actions: write
       contents: write
@@ -92,6 +164,40 @@ jobs:
         with:
           version: "1"
       - uses: julia-actions/cache@v2
+      - name: Ensure General registry (git fallback)
+        shell: bash
+        run: |
+          set -euo pipefail
+          julia -e '
+            using Pkg
+            depot = DEPOT_PATH[1]
+            mkpath(depot)
+            general_dir = joinpath(depot, "registries", "General")
+            registry_toml = joinpath(general_dir, "Registry.toml")
+
+            function ensure_general()
+                if isfile(registry_toml)
+                    println("General registry already present: ", general_dir)
+                    return
+                end
+                mkpath(dirname(general_dir))
+                Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/JuliaRegistries/General.git"))
+                println("Installed General registry from GitHub.")
+            end
+
+            for attempt in 1:3
+                try
+                    ensure_general()
+                    break
+                catch err
+                    @warn "Failed to ensure General registry" attempt err
+                    if attempt == 3
+                        rethrow()
+                    end
+                    sleep(3 * attempt)
+                end
+            end
+          '
       - name: Configure doc environment
         shell: julia --project=docs --color=yes {0}
         run: |
