@@ -25,3 +25,5 @@ Use `tokenization_text = tokenization_view(tokenizer, clean_text)`, then call
 `encode_result(tokenizer, tokenization_text; assume_normalized=true, return_offsets=true, return_masks=true, ...)`.
 Word and subword offsets must both be interpreted in the same `tokenization_text`
 coordinate system.
+
+See [Offsets Alignment Examples](offset_alignment_examples.md) for a worked subword-to-word mapping tutorial.

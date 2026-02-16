@@ -18,12 +18,13 @@ makedocs(
                   canonical = "https://mantzaris.github.io/KeemenaSubwords.jl",
                   edit_link = "main"),
     doctest   = true,
-    checkdocs = :exports,              # complain only for *exported* names :contentReference[oaicite:0]{index=0}
+    checkdocs = :exports,              # complain only for exported names
     pages = [
         "Home"          => "index.md",
         "Concepts"      => "concepts.md",
         "Integration"   => "integration.md",
         "Normalization & Offsets" => "normalization_offsets_contract.md",
+        "Offsets Alignment Examples" => "offset_alignment_examples.md",
         "Loading"       => "loading.md",
         "Training"      => "training.md",
         "Formats"       => "formats.md",

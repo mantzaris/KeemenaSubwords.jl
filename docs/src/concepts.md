@@ -120,6 +120,7 @@ High-level offset contract:
 - Sentinel for no-span tokens: `(0, 0)`.
 
 For the full contract and helper APIs, see [Normalization and Offsets Contract](normalization_offsets_contract.md).
+For worked alignment walkthroughs, see [Offsets Alignment Examples](offset_alignment_examples.md).
 
 Recommended KeemenaPreprocessing alignment pattern:
 

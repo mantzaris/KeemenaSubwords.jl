@@ -3,6 +3,8 @@
 This document is the canonical contract for normalization and offsets behavior in
 KeemenaSubwords when integrated with KeemenaPreprocessing.
 
+For step-by-step usage patterns, see [Offsets Alignment Examples](offset_alignment_examples.md).
+
 ## Normalization Ownership
 
 1. Pipeline normalization (KeemenaPreprocessing):
