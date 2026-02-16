@@ -57,6 +57,7 @@ install_model!(:llama3_8b_tokenizer; token=ENV["HF_TOKEN"])
 ## Documentation Map
 
 - [Concepts](concepts.md)
+- [Structured outputs and batching](structured_outputs_and_batching.md)
 - [Built-in model inventory](models.md)
 - [Normalization and offsets contract](normalization_offsets_contract.md)
 - [Offsets alignment worked examples](offset_alignment_examples.md)

@@ -22,6 +22,7 @@ makedocs(
     pages = [
         "Home"          => "index.md",
         "Concepts"      => "concepts.md",
+        "Structured Outputs and Batching" => "structured_outputs_and_batching.md",
         "Integration"   => "integration.md",
         "Normalization & Offsets" => "normalization_offsets_contract.md",
         "Offsets Alignment Examples" => "offset_alignment_examples.md",

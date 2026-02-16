@@ -121,6 +121,7 @@ High-level offset contract:
 
 For the full contract and helper APIs, see [Normalization and Offsets Contract](normalization_offsets_contract.md).
 For worked alignment walkthroughs, see [Offsets Alignment Examples](offset_alignment_examples.md).
+For batching and padding recipes, see [Structured Outputs and Batching](structured_outputs_and_batching.md).
 
 Recommended KeemenaPreprocessing alignment pattern:
 

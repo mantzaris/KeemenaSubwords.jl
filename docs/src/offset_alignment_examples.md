@@ -204,3 +204,53 @@ end
 ```
 
 This fallback keeps alignment pipelines robust across both string-safe and byte-level offset cases.
+
+## Example 5: Map A Labeled Span To Token Indices
+
+```@example offsets_alignment
+function token_indices_overlapping_span(
+    offsets::Vector{Tuple{Int,Int}},
+    span::Tuple{Int,Int},
+)::Vector{Int}
+    span_start, span_stop = span
+    span_stop > span_start || return Int[]
+
+    overlaps = Int[]
+    for (token_index, offset) in pairs(offsets)
+        has_nonempty_span(offset) || continue
+        token_start, token_stop = offset
+        if min(token_stop, span_stop) > max(token_start, span_start)
+            push!(overlaps, token_index)
+        end
+    end
+    return overlaps
+end
+
+labeled_range = findfirst("offsets", tokenization_text)
+@assert labeled_range !== nothing
+
+labeled_span = (
+    first(labeled_range),
+    nextind(tokenization_text, last(labeled_range)),
+)
+overlapping_token_indices = token_indices_overlapping_span(token_offsets, labeled_span)
+
+overlap_rows = [
+    (
+        token_index = i,
+        token_string = result.tokens[i],
+        token_offset = token_offsets[i],
+        token_substring = try_span_substring(tokenization_text, token_offsets[i]),
+    )
+    for i in overlapping_token_indices
+]
+
+(
+    labeled_span = labeled_span,
+    labeled_substring = try_span_substring(tokenization_text, labeled_span),
+    overlapping_token_indices = overlapping_token_indices,
+    overlapping_tokens = overlap_rows,
+)
+```
+
+This pattern is useful for projecting character/codeunit span labels onto token indices for training targets.
