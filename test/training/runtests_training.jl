@@ -27,6 +27,8 @@
     include("test_hf_gpt2_bytebpe_training_export_reload.jl")
     include("test_hf_gpt2_bytebpe_training_export_shape.jl")
     include("test_training_bundle_manifest_roundtrip.jl")
+    include("test_training_bundle_manifest_path_hardening.jl")
+    include("test_training_bundle_manifest_errors.jl")
     include("test_sentencepiece_training_e2e.jl")
     include("test_sentencepiece_training_offsets.jl")
     include("test_sentencepiece_training_unknown_offsets.jl")

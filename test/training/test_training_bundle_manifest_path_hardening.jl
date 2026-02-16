@@ -27,7 +27,7 @@ function _write_manifest_with_vocab_path(
     return nothing
 end
 
-@testset "Extended training manifest path hardening" begin
+@testset "Training bundle manifest path hardening" begin
     @testset "Reject traversal path" begin
         bundle_dir = mktempdir()
         _write_manifest_with_vocab_path(bundle_dir, "../outside.txt")
