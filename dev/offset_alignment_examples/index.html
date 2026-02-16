@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Offsets Alignment Examples · KeemenaSubwords.jl</title><meta name="title" content="Offsets Alignment Examples · KeemenaSubwords.jl"/><meta property="og:title" content="Offsets Alignment Examples · KeemenaSubwords.jl"/><meta property="twitter:title" content="Offsets Alignment Examples · KeemenaSubwords.jl"/><meta name="description" content="Documentation for KeemenaSubwords.jl."/><meta property="og:description" content="Documentation for KeemenaSubwords.jl."/><meta property="twitter:description" content="Documentation for KeemenaSubwords.jl."/><meta property="og:url" content="https://mantzaris.github.io/KeemenaSubwords.jl/offset_alignment_examples/"/><meta property="twitter:url" content="https://mantzaris.github.io/KeemenaSubwords.jl/offset_alignment_examples/"/><link rel="canonical" href="https://mantzaris.github.io/KeemenaSubwords.jl/offset_alignment_examples/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">KeemenaSubwords.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><a class="tocitem" href="../concepts/">Concepts</a></li><li><a class="tocitem" href="../integration/">Integration</a></li><li><a class="tocitem" href="../normalization_offsets_contract/">Normalization &amp; Offsets</a></li><li class="is-active"><a class="tocitem" href>Offsets Alignment Examples</a><ul class="internal"><li><a class="tocitem" href="#Mental-Model-And-Coordinate-System"><span>Mental Model And Coordinate System</span></a></li><li><a class="tocitem" href="#Example-1:-Inspect-encode_result-Output"><span>Example 1: Inspect <code>encode_result</code> Output</span></a></li><li><a class="tocitem" href="#Example-2:-Word-Offsets-And-Subword-To-Word-Mapping"><span>Example 2: Word Offsets And Subword-To-Word Mapping</span></a></li><li><a class="tocitem" href="#Example-3:-Special-Tokens-Policy-For-Alignment"><span>Example 3: Special Tokens Policy For Alignment</span></a></li><li><a class="tocitem" href="#Example-4:-Byte-Level-Caveat-And-Safe-Extraction"><span>Example 4: Byte-Level Caveat And Safe Extraction</span></a></li></ul></li><li><a class="tocitem" href="../loading/">Loading</a></li><li><a class="tocitem" href="../training/">Training</a></li><li><a class="tocitem" href="../formats/">Formats</a></li><li><a class="tocitem" href="../loading_local/">Loading Local</a></li><li><a class="tocitem" href="../llm_cookbook/">LLM Cookbook</a></li><li><a class="tocitem" href="../gated_models/">Gated Models</a></li><li><a class="tocitem" href="../troubleshooting/">Troubleshooting</a></li><li><a class="tocitem" href="../models/">Built-In Models</a></li><li><a class="tocitem" href="../api/">API Reference</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Offsets Alignment Examples</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Offsets Alignment Examples</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/mantzaris/KeemenaSubwords.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/mantzaris/KeemenaSubwords.jl/blob/main/docs/src/offset_alignment_examples.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Offsets-Alignment-Examples"><a class="docs-heading-anchor" href="#Offsets-Alignment-Examples">Offsets Alignment Examples</a><a id="Offsets-Alignment-Examples-1"></a><a class="docs-heading-anchor-permalink" href="#Offsets-Alignment-Examples" title="Permalink"></a></h1><p>This page is a practical tutorial for applying the normalization and offsets contract. For the normative specification, see <a href="../normalization_offsets_contract/">Normalization and Offsets Contract</a>.</p><h2 id="Mental-Model-And-Coordinate-System"><a class="docs-heading-anchor" href="#Mental-Model-And-Coordinate-System">Mental Model And Coordinate System</a><a id="Mental-Model-And-Coordinate-System-1"></a><a class="docs-heading-anchor-permalink" href="#Mental-Model-And-Coordinate-System" title="Permalink"></a></h2><p>Offsets are always interpreted in the coordinate system of <code>tokenization_text</code>. <code>tokenization_text</code> may differ from <code>clean_text</code> when tokenizer intrinsic normalization is active.</p><p>Safe pattern with KeemenaPreprocessing output:</p><ol><li><code>tokenization_text = tokenization_view(tokenizer, clean_text)</code></li><li><code>encode_result(tokenizer, tokenization_text; assume_normalized=true, return_offsets=true, ...)</code></li></ol><p>Offset contract reminders:</p><ul><li>Offsets are 1-based UTF-8 codeunit half-open spans <code>(start, stop)</code>.</li><li><code>stop</code> is exclusive.</li><li>Sentinel <code>(0, 0)</code> means &quot;no span&quot; and should be treated as non-aligning.</li></ul><h2 id="Example-1:-Inspect-encode_result-Output"><a class="docs-heading-anchor" href="#Example-1:-Inspect-encode_result-Output">Example 1: Inspect <code>encode_result</code> Output</a><a id="Example-1:-Inspect-encode_result-Output-1"></a><a class="docs-heading-anchor-permalink" href="#Example-1:-Inspect-encode_result-Output" title="Permalink"></a></h2><pre><code class="language-julia hljs">using KeemenaSubwords
+
+tokenizer = load_tokenizer(:core_sentencepiece_unigram_en)
+clean_text = &quot;Hello, world! This is an offsets demo.&quot;
+tokenization_text = tokenization_view(tokenizer, clean_text)
+
+result = encode_result(
+    tokenizer,
+    tokenization_text;
+    assume_normalized = true,
+    add_special_tokens = true,
+    return_offsets = true,
+    return_masks = true,
+)
+
+@assert result.offsets !== nothing
+@assert result.special_tokens_mask !== nothing
+
+token_offsets = result.offsets
+special_tokens_mask = result.special_tokens_mask
+
+rows = [
+    (
+        token_index = i,
+        token_id = result.ids[i],
+        token_string = result.tokens[i],
+        offset = token_offsets[i],
+        substring_or_nothing = try_span_substring(tokenization_text, token_offsets[i]),
+        is_special = special_tokens_mask[i] == 1,
+        has_span = has_nonempty_span(token_offsets[i]),
+    )
+    for i in eachindex(result.ids)
+]
+
+rows[1:min(end, 30)]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">9-element Vector{@NamedTuple{token_index::Int64, token_id::Int64, token_string::String, offset::Tuple{Int64, Int64}, substring_or_nothing::String, is_special::Bool, has_span::Bool}}:
+ (token_index = 1, token_id = 2, token_string = &quot;&lt;s&gt;&quot;, offset = (0, 0), substring_or_nothing = &quot;&quot;, is_special = 1, has_span = 0)
+ (token_index = 2, token_id = 1, token_string = &quot;&lt;unk&gt;&quot;, offset = (1, 7), substring_or_nothing = &quot;Hello,&quot;, is_special = 1, has_span = 1)
+ (token_index = 3, token_id = 1, token_string = &quot;&lt;unk&gt;&quot;, offset = (8, 14), substring_or_nothing = &quot;world!&quot;, is_special = 1, has_span = 1)
+ (token_index = 4, token_id = 1, token_string = &quot;&lt;unk&gt;&quot;, offset = (15, 19), substring_or_nothing = &quot;This&quot;, is_special = 1, has_span = 1)
+ (token_index = 5, token_id = 1, token_string = &quot;&lt;unk&gt;&quot;, offset = (20, 22), substring_or_nothing = &quot;is&quot;, is_special = 1, has_span = 1)
+ (token_index = 6, token_id = 1, token_string = &quot;&lt;unk&gt;&quot;, offset = (23, 25), substring_or_nothing = &quot;an&quot;, is_special = 1, has_span = 1)
+ (token_index = 7, token_id = 1, token_string = &quot;&lt;unk&gt;&quot;, offset = (26, 33), substring_or_nothing = &quot;offsets&quot;, is_special = 1, has_span = 1)
+ (token_index = 8, token_id = 1, token_string = &quot;&lt;unk&gt;&quot;, offset = (34, 39), substring_or_nothing = &quot;demo.&quot;, is_special = 1, has_span = 1)
+ (token_index = 9, token_id = 3, token_string = &quot;&lt;/s&gt;&quot;, offset = (0, 0), substring_or_nothing = &quot;&quot;, is_special = 1, has_span = 0)</code></pre><p>How to interpret these rows:</p><ul><li>Tokens with offset <code>(0, 0)</code> are no-span tokens. They are usually inserted specials.</li><li><code>is_special</code> and <code>has_span</code> are related but not identical concepts. Align by span, not by mask alone.</li><li><code>substring_or_nothing</code> helps verify offsets quickly against <code>tokenization_text</code>.</li><li>Use <code>tokenization_text</code> for offset-based slicing. Do not assume <code>clean_text</code> uses the same coordinates.</li></ul><h2 id="Example-2:-Word-Offsets-And-Subword-To-Word-Mapping"><a class="docs-heading-anchor" href="#Example-2:-Word-Offsets-And-Subword-To-Word-Mapping">Example 2: Word Offsets And Subword-To-Word Mapping</a><a id="Example-2:-Word-Offsets-And-Subword-To-Word-Mapping-1"></a><a class="docs-heading-anchor-permalink" href="#Example-2:-Word-Offsets-And-Subword-To-Word-Mapping" title="Permalink"></a></h2><pre><code class="language-julia hljs">function whitespace_word_offsets(text)::Vector{Tuple{Int,Int}}
+    offsets = Tuple{Int,Int}[]
+    stop_exclusive = ncodeunits(text) + 1
+    i = firstindex(text)
+
+    while i &lt; stop_exclusive
+        while i &lt; stop_exclusive &amp;&amp; isspace(text[i])
+            i = nextind(text, i)
+        end
+        i &lt; stop_exclusive || break
+
+        word_start = i
+        while i &lt; stop_exclusive &amp;&amp; !isspace(text[i])
+            i = nextind(text, i)
+        end
+        word_stop = i
+        push!(offsets, (word_start, word_stop))
+    end
+
+    return offsets
+end
+
+overlap_len(a_start, a_stop, b_start, b_stop)::Int =
+    max(0, min(a_stop, b_stop) - max(a_start, b_start))
+
+function subword_to_word_index(
+    word_offsets::Vector{Tuple{Int,Int}},
+    subword_offset::Tuple{Int,Int},
+)::Union{Nothing,Int}
+    has_nonempty_span(subword_offset) || return nothing
+    sub_start, sub_stop = subword_offset
+
+    for (word_index, (word_start, word_stop)) in pairs(word_offsets)
+        if sub_start &gt;= word_start &amp;&amp; sub_stop &lt;= word_stop
+            return word_index
+        end
+    end
+
+    best_index = nothing
+    best_overlap = 0
+    for (word_index, (word_start, word_stop)) in pairs(word_offsets)
+        current_overlap = overlap_len(sub_start, sub_stop, word_start, word_stop)
+        # Strict &gt; means equal-overlap ties keep the earliest word index.
+        if current_overlap &gt; best_overlap
+            best_overlap = current_overlap
+            best_index = word_index
+        end
+    end
+
+    return best_overlap &gt; 0 ? best_index : nothing
+end
+
+word_offsets = whitespace_word_offsets(tokenization_text)
+token_to_word = map(token_offsets) do off
+    subword_to_word_index(word_offsets, off)
+end
+
+word_rows = [
+    (
+        word_index = i,
+        offset = word_offsets[i],
+        word_substring = try_span_substring(tokenization_text, word_offsets[i]),
+    )
+    for i in eachindex(word_offsets)
+]
+
+token_rows = [
+    (
+        token_index = i,
+        token_string = result.tokens[i],
+        offset = token_offsets[i],
+        word_index = token_to_word[i],
+        word_substring = token_to_word[i] === nothing ? nothing :
+            try_span_substring(tokenization_text, word_offsets[token_to_word[i]]),
+    )
+    for i in eachindex(result.tokens)
+]
+
+(
+    words = word_rows,
+    first_tokens = token_rows[1:min(end, 30)],
+)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(words = [(word_index = 1, offset = (1, 7), word_substring = &quot;Hello,&quot;), (word_index = 2, offset = (8, 14), word_substring = &quot;world!&quot;), (word_index = 3, offset = (15, 19), word_substring = &quot;This&quot;), (word_index = 4, offset = (20, 22), word_substring = &quot;is&quot;), (word_index = 5, offset = (23, 25), word_substring = &quot;an&quot;), (word_index = 6, offset = (26, 33), word_substring = &quot;offsets&quot;), (word_index = 7, offset = (34, 39), word_substring = &quot;demo.&quot;)], first_tokens = NamedTuple{(:token_index, :token_string, :offset, :word_index, :word_substring)}[(token_index = 1, token_string = &quot;&lt;s&gt;&quot;, offset = (0, 0), word_index = nothing, word_substring = nothing), (token_index = 2, token_string = &quot;&lt;unk&gt;&quot;, offset = (1, 7), word_index = 1, word_substring = &quot;Hello,&quot;), (token_index = 3, token_string = &quot;&lt;unk&gt;&quot;, offset = (8, 14), word_index = 2, word_substring = &quot;world!&quot;), (token_index = 4, token_string = &quot;&lt;unk&gt;&quot;, offset = (15, 19), word_index = 3, word_substring = &quot;This&quot;), (token_index = 5, token_string = &quot;&lt;unk&gt;&quot;, offset = (20, 22), word_index = 4, word_substring = &quot;is&quot;), (token_index = 6, token_string = &quot;&lt;unk&gt;&quot;, offset = (23, 25), word_index = 5, word_substring = &quot;an&quot;), (token_index = 7, token_string = &quot;&lt;unk&gt;&quot;, offset = (26, 33), word_index = 6, word_substring = &quot;offsets&quot;), (token_index = 8, token_string = &quot;&lt;unk&gt;&quot;, offset = (34, 39), word_index = 7, word_substring = &quot;demo.&quot;), (token_index = 9, token_string = &quot;&lt;/s&gt;&quot;, offset = (0, 0), word_index = nothing, word_substring = nothing)])</code></pre><p>Limitations of this tutorial mapping:</p><ul><li>Subword spans can overlap multiple words in some normalization and punctuation situations.</li><li>This example returns one best word index (full containment first, else maximum overlap).</li><li>Equal-overlap ties are resolved to the earliest word index.</li><li>If you need multi-word mapping, return all overlapping word indices instead of one index.</li></ul><h2 id="Example-3:-Special-Tokens-Policy-For-Alignment"><a class="docs-heading-anchor" href="#Example-3:-Special-Tokens-Policy-For-Alignment">Example 3: Special Tokens Policy For Alignment</a><a id="Example-3:-Special-Tokens-Policy-For-Alignment-1"></a><a class="docs-heading-anchor-permalink" href="#Example-3:-Special-Tokens-Policy-For-Alignment" title="Permalink"></a></h2><pre><code class="language-julia hljs">participates_in_alignment(offset, is_special)::Bool = has_nonempty_span(offset)
+
+alignment_rows = [
+    (
+        token_index = i,
+        token_string = result.tokens[i],
+        offset = token_offsets[i],
+        is_special = special_tokens_mask[i] == 1,
+        participates = participates_in_alignment(token_offsets[i], special_tokens_mask[i] == 1),
+    )
+    for i in eachindex(result.tokens)
+]
+
+(
+    skipped = [row for row in alignment_rows if !row.participates][1:min(end, 10)],
+    participating = [row for row in alignment_rows if row.participates][1:min(end, 10)],
+)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(skipped = @NamedTuple{token_index::Int64, token_string::String, offset::Tuple{Int64, Int64}, is_special::Bool, participates::Bool}[(token_index = 1, token_string = &quot;&lt;s&gt;&quot;, offset = (0, 0), is_special = 1, participates = 0), (token_index = 9, token_string = &quot;&lt;/s&gt;&quot;, offset = (0, 0), is_special = 1, participates = 0)], participating = @NamedTuple{token_index::Int64, token_string::String, offset::Tuple{Int64, Int64}, is_special::Bool, participates::Bool}[(token_index = 2, token_string = &quot;&lt;unk&gt;&quot;, offset = (1, 7), is_special = 1, participates = 1), (token_index = 3, token_string = &quot;&lt;unk&gt;&quot;, offset = (8, 14), is_special = 1, participates = 1), (token_index = 4, token_string = &quot;&lt;unk&gt;&quot;, offset = (15, 19), is_special = 1, participates = 1), (token_index = 5, token_string = &quot;&lt;unk&gt;&quot;, offset = (20, 22), is_special = 1, participates = 1), (token_index = 6, token_string = &quot;&lt;unk&gt;&quot;, offset = (23, 25), is_special = 1, participates = 1), (token_index = 7, token_string = &quot;&lt;unk&gt;&quot;, offset = (26, 33), is_special = 1, participates = 1), (token_index = 8, token_string = &quot;&lt;unk&gt;&quot;, offset = (34, 39), is_special = 1, participates = 1)])</code></pre><p>Policy summary:</p><ul><li>Pragmatic default: participate in alignment iff <code>has_nonempty_span(offset)</code>.</li><li>Inserted special tokens usually have <code>(0, 0)</code> and are skipped automatically.</li></ul><h2 id="Example-4:-Byte-Level-Caveat-And-Safe-Extraction"><a class="docs-heading-anchor" href="#Example-4:-Byte-Level-Caveat-And-Safe-Extraction">Example 4: Byte-Level Caveat And Safe Extraction</a><a id="Example-4:-Byte-Level-Caveat-And-Safe-Extraction-1"></a><a class="docs-heading-anchor-permalink" href="#Example-4:-Byte-Level-Caveat-And-Safe-Extraction" title="Permalink"></a></h2><p>Byte-level tokenizers can produce offsets that are valid codeunit spans but are not always safe Julia string slicing boundaries on multibyte text.</p><p>When you consume offsets, use this safe pattern:</p><pre><code class="language-julia hljs"># non-executable byte-level pattern
+substring = try_span_substring(tokenization_text, offset)
+
+if substring === nothing &amp;&amp; has_nonempty_span(offset)
+    bytes = span_codeunits(tokenization_text, offset)
+    # Use bytes in a byte-aware path when boundaries are not string-safe.
+end</code></pre><p>This fallback keeps alignment pipelines robust across both string-safe and byte-level offset cases.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../normalization_offsets_contract/">« Normalization &amp; Offsets</a><a class="docs-footer-nextpage" href="../loading/">Loading »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Monday 16 February 2026 17:05">Monday 16 February 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
