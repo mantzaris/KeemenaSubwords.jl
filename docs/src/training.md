@@ -21,6 +21,8 @@ Available now:
 - `train_hf_roberta_bytebpe_result(...)`
 - `train_hf_gpt2_bytebpe(...)`
 - `train_hf_gpt2_bytebpe_result(...)`
+- `save_training_bundle(result, out_dir; ...)`
+- `load_training_bundle(out_dir)`
 
 ## Training API
 
@@ -41,6 +43,10 @@ train_hf_roberta_bytebpe
 train_hf_roberta_bytebpe_result
 train_hf_gpt2_bytebpe
 train_hf_gpt2_bytebpe_result
+write_training_manifest
+read_training_manifest
+save_training_bundle
+load_training_bundle
 ```
 
 ## HF BERT WordPiece Preset
@@ -127,6 +133,25 @@ reloaded = load_hf_tokenizer_json("out_hf_gpt2/tokenizer.json")
   example via KeemenaPreprocessing) before calling `encode`/`encode_result`.
 - ByteBPE exports as `vocab.txt + merges.txt`; when reloading exported files,
   use `format=:bytebpe` if format auto-detection is ambiguous.
+
+## Training Bundles
+
+```julia
+using KeemenaSubwords
+
+corpus = ["hello world", "café costs 5"]
+result = train_wordpiece_result(corpus; vocab_size=96, min_frequency=1)
+
+save_training_bundle(result, "out_bundle")
+reloaded = load_training_bundle("out_bundle")
+
+encode(reloaded, "hello café"; add_special_tokens=false)
+```
+
+`save_training_bundle` writes exported tokenizer files plus
+`keemena_training_manifest.json`, so reload does not require remembering loader
+kwargs. Offsets behavior remains unchanged and compatible with
+`tokenization_view(...)` + `encode_result(...; assume_normalized=true)`.
 
 Current behavior:
 - SentencePiece training supports both `model_type=:unigram` and

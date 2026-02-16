@@ -1,6 +1,7 @@
 module Training
 
-import ..KeemenaSubwords: BPETokenizer,
+import ..KeemenaSubwords: AbstractSubwordTokenizer,
+    BPETokenizer,
     ByteBPETokenizer,
     UnigramTokenizer,
     WordPieceTokenizer,
@@ -28,6 +29,9 @@ import ..KeemenaSubwords: BPETokenizer,
     _hf_bytelevel_raw_splits_with_work_spans,
     _build_hf_tokenizer_from_parts,
     token_to_id,
+    id_to_token,
+    vocab_size,
+    special_tokens,
     _byte_unicode_tables,
     build_vocab
 
@@ -42,10 +46,12 @@ include("sentencepiece_train.jl")
 include("presets/bert_wordpiece_hf.jl")
 include("presets/roberta_bytebpe_hf.jl")
 include("presets/gpt2_bytebpe_hf.jl")
+include("training_manifest.jl")
 
 export AbstractTrainingConfig,
     AbstractTrainingArtifacts,
     TrainingResult,
+    TrainingManifestV1,
     BPETrainingConfig,
     BPETrainingArtifacts,
     ByteBPETrainingConfig,
@@ -62,6 +68,10 @@ export AbstractTrainingConfig,
     RobertaByteBPETrainingArtifacts,
     GPT2ByteBPETrainingConfig,
     GPT2ByteBPETrainingArtifacts,
+    write_training_manifest,
+    read_training_manifest,
+    save_training_bundle,
+    load_training_bundle,
     train_bpe,
     train_bpe_result,
     train_bytebpe,

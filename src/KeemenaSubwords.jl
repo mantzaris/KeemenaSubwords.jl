@@ -31,7 +31,11 @@ using .Training: train_bpe,
     train_hf_roberta_bytebpe,
     train_hf_roberta_bytebpe_result,
     train_hf_gpt2_bytebpe,
-    train_hf_gpt2_bytebpe_result
+    train_hf_gpt2_bytebpe_result,
+    write_training_manifest,
+    read_training_manifest,
+    save_training_bundle,
+    load_training_bundle
 include("io.jl")
 
 export AbstractSubwordTokenizer,
@@ -124,6 +128,10 @@ export AbstractSubwordTokenizer,
        train_hf_roberta_bytebpe_result,
        train_hf_gpt2_bytebpe,
        train_hf_gpt2_bytebpe_result,
+       write_training_manifest,
+       read_training_manifest,
+       save_training_bundle,
+       load_training_bundle,
        save_tokenizer,
        export_tokenizer
 
