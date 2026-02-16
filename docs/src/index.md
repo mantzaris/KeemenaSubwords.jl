@@ -54,9 +54,21 @@ load_tiktoken("/path/to/tokenizer.model")
 install_model!(:llama3_8b_tokenizer; token=ENV["HF_TOKEN"])
 ```
 
+## Quick Guide Recipes
+
+- [Quick Guide Recipes: choose your path](quick_guide_recipes.md)
+- [Pretrained tokenizer recipes](quick_guide_recipes.md#pretrained-tokenizer-recipes-common)
+- [Training recipes (experimental)](quick_guide_recipes.md#training-recipes-experimental)
+- [Structured outputs and batching (training-ready tensors)](structured_outputs_and_batching.md)
+- [Offsets alignment worked examples](offset_alignment_examples.md)
+- [Tokenizer formats and required files](formats.md)
+- [Installable gated models](gated_models.md)
+- [LLM cookbook](llm_cookbook.md)
+
 ## Documentation Map
 
 - [Concepts](concepts.md)
+- [Quick guide recipes](quick_guide_recipes.md)
 - [Structured outputs and batching (go-to for training-ready tensors)](structured_outputs_and_batching.md)
 - [Built-in model inventory](models.md)
 - [Normalization and offsets contract](normalization_offsets_contract.md)
