@@ -26,6 +26,17 @@ Structured encoding and file-spec APIs are also part of the public surface:
 `validate_offsets_contract`, `assert_offsets_contract`,
 `encode_result`, `encode_batch_result`.
 
+## Quick Handler APIs
+
+```@docs
+quick_tokenize
+quick_encode_batch
+collate_padded_batch
+causal_lm_labels
+quick_causal_lm_batch
+quick_train_bundle
+```
+
 ## Registry and Installation APIs
 
 ```@docs

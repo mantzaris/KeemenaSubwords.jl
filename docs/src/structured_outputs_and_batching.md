@@ -2,6 +2,13 @@
 
 This page shows practical recipes for turning tokenizer outputs into training-ready batch tensors and label alignments.
 
+Fast path helpers:
+- `quick_causal_lm_batch(...)` for one-call `texts -> ids + attention_mask + labels`.
+- `collate_padded_batch(...)` when you already have `Vector{TokenizationResult}`.
+- `causal_lm_labels(...)` when you want label shifting control on existing matrices.
+
+The examples below show the same workflow step by step so you can customize each stage.
+
 ## `TokenizationResult` Fields And Invariants
 
 `encode_result` and `encode_batch_result` return `TokenizationResult` values with:

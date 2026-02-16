@@ -1323,6 +1323,7 @@ end
         end
     end
 
+    include("quick_handlers.jl")
     include("e2e_user_workflows.jl")
     include("e2e_user_workflows_extended.jl")
     include("test_goldens.jl")

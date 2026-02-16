@@ -37,33 +37,65 @@ Use this 3-step mental model:
 - I need a gated tokenizer -> [P9](#p9-install-and-load-a-gated-model)
 - I want to train a tokenizer -> [T1](#t1-train-a-tiny-wordpiece-tokenizer-save-reload-and-encode)
 
+## Quick Handlers (1-2 line workflows)
+
+Use these helpers when you want outputs fast, then drop to the step-by-step recipes if you need customization:
+
+- `quick_tokenize(...)` for one text -> pieces, ids, decoded text, offsets, and masks.
+- `quick_encode_batch(...)` for many texts -> `Vector{TokenizationResult}` with optional offsets and masks.
+- `quick_causal_lm_batch(...)` for many texts -> padded `ids`, `attention_mask`, and causal `labels`.
+- `quick_train_bundle(...)` for one-call training round-trip -> train, save bundle, reload, and sanity encode/decode.
+
+```@example quick_guide_helpers
+using KeemenaSubwords
+
+single = quick_tokenize(:core_bpe_en, "hello world")
+batch = quick_encode_batch(:core_wordpiece_en, ["hello world", "hello"])
+causal = quick_causal_lm_batch(:core_wordpiece_en, ["hello world", "hello"])
+training = quick_train_bundle(
+    :wordpiece,
+    ["hello world", "hello tokenizer", "world tokenizer"];
+    vocab_size=48,
+    min_frequency=1,
+)
+
+(
+    single_keys=keys(single),
+    batch_lengths=batch.sequence_lengths,
+    causal_shapes=(ids=size(causal.ids), labels=size(causal.labels)),
+    training_files=training.bundle_files,
+)
+```
+
 ## Pretrained tokenizer recipes (common)
 
 ### P1: Load a shipped tokenizer and encode or decode
 
 - **You have:** `text::String`, for example `"hello world"`.
 - **You want:** token pieces (`Vector{String}`), token ids (`Vector{Int}`), and a decoded string.
-- **Objective:** quickly verify end-to-end tokenization behavior on a built-in model.
+- **Objective:** quickly verify end-to-end tokenization behavior on a built-in model, with the option to inspect offsets and masks in the same call.
 - **Steps:**
-  1. Call `load_tokenizer(:core_bpe_en)` to get a shipped tokenizer.
-  2. Call `tokenize(tokenizer, text)` for human-readable pieces.
-  3. Call `encode(tokenizer, text; add_special_tokens=true)` for model ids.
-  4. Call `decode(tokenizer, token_ids)` to inspect reconstruction.
+  1. Call `quick_tokenize(:core_bpe_en, text)` for a one-call output bundle.
+  2. Read `token_pieces`, `token_ids`, and `decoded_text`.
+  3. If needed, pass options like `add_special_tokens=false` or `return_offsets=false`.
 
 ```@example quick_guide_p1
 using KeemenaSubwords
 
-tokenizer = load_tokenizer(:core_bpe_en)
 text = "hello world"
-
-token_pieces = tokenize(tokenizer, text)
-token_ids = encode(tokenizer, text; add_special_tokens=true)
-decoded_text = decode(tokenizer, token_ids)
+quick_output = quick_tokenize(
+    :core_bpe_en,
+    text;
+    add_special_tokens=true,
+    return_offsets=true,
+    return_masks=true,
+)
 
 (
-    token_pieces=token_pieces,
-    token_ids=token_ids,
-    decoded_text=decoded_text,
+    token_pieces=quick_output.token_pieces,
+    token_ids=quick_output.token_ids,
+    decoded_text=quick_output.decoded_text,
+    offsets_reference=quick_output.metadata.offsets_reference,
 )
 ```
 
@@ -72,10 +104,36 @@ decoded_text = decode(tokenizer, token_ids)
   - `token_ids` is a vector of integers.
   - `decoded_text` is a string and should be close to input text for covered vocabulary.
 - **Concerns and setup notes:**
-  - `tokenize` returns readable pieces, `encode` returns integer ids, `decode` maps ids back to text.
+  - `tokenize` returns readable pieces, `encode` returns integer ids, and `decode` maps ids back to text.
+  - `quick_tokenize` uses `encode_result` internally, so offsets and masks are available by default.
   - `add_special_tokens=true` includes model specials (useful for model input); set `false` for raw spans.
   - Ids are always 1-based in this package.
 - **Next:** if you need model selection, go to [P2](#p2-discover-models-and-inspect-metadata). If you need offsets, go to [P3](#p3-get-ids-plus-offsets-plus-masks-for-alignment).
+
+#### What `quick_tokenize` does under the hood
+
+```@example quick_guide_p1_under_hood
+using KeemenaSubwords
+
+tokenizer = load_tokenizer(:core_bpe_en)
+text = "hello world"
+
+tokenization_text = tokenization_view(tokenizer, text)
+result = encode_result(
+    tokenizer,
+    tokenization_text;
+    assume_normalized=true,
+    add_special_tokens=true,
+    return_offsets=true,
+    return_masks=true,
+)
+
+(
+    token_pieces=result.tokens,
+    token_ids=result.ids,
+    decoded_text=decode(tokenizer, result.ids),
+)
+```
 
 ### P2: Discover models and inspect metadata
 
@@ -270,79 +328,72 @@ sequence_lengths = [length(result.ids) for result in batch_results]
 
 ### P6: Padding plus labels for training (pointer recipe)
 
-- **You have:** `Vector{TokenizationResult}` with variable sequence lengths.
+- **You have:** many input texts (`Vector{String}`), or precomputed `Vector{TokenizationResult}` if you split steps yourself.
 - **You want:** padded `(seq_len, batch)` matrices and causal LM labels.
 - **Objective:** build training-ready tensors with explicit padding and masking behavior.
 - **Steps:**
-  1. Build per-sequence results with `encode_batch_result`.
-  2. Collate into padded `ids` and `attention_mask` matrices.
-  3. Build labels with `ignore_index=-100`.
-  4. Keep final valid token per sequence at `-100` because there is no next-token target.
-  5. Convert to 0-based labels only if external tooling requires it.
+  1. Call `quick_causal_lm_batch(...)` to run encode, collate, and label-shift in one call.
+  2. Read `ids`, `attention_mask`, and `labels`.
+  3. Use `zero_based=true` only for external consumers that expect 0-based labels.
 
 ```@example quick_guide_p6
 using KeemenaSubwords
 
-tokenizer = load_tokenizer(:core_wordpiece_en)
-clean_texts = ["hello world", "hello"]
-tokenization_texts = [tokenization_view(tokenizer, clean_text) for clean_text in clean_texts]
-batch_results = encode_batch_result(
-    tokenizer,
-    tokenization_texts;
-    assume_normalized=true,
+training_batch = quick_causal_lm_batch(
+    :core_wordpiece_en,
+    ["hello world", "hello"];
     add_special_tokens=true,
     return_offsets=false,
-    return_masks=true,
+    ignore_index=-100,
+    zero_based=false,
 )
 
-function tiny_pad_batch(results::Vector{TokenizationResult}; pad_token_id::Int)
-    batch_size = length(results)
-    max_length = maximum(length(result.ids) for result in results)
-    ids = fill(pad_token_id, max_length, batch_size)
-    attention_mask = fill(0, max_length, batch_size)
-    for (column_index, result) in pairs(results)
-        sequence_length = length(result.ids)
-        ids[1:sequence_length, column_index] = result.ids
-        attention_mask[1:sequence_length, column_index] .= 1
-    end
-    return (ids=ids, attention_mask=attention_mask)
-end
-
-function tiny_causal_labels(ids::Matrix{Int}, attention_mask::Matrix{Int}; ignore_index::Int=-100)
-    labels = fill(ignore_index, size(ids))
-    for column_index in axes(ids, 2)
-        valid_positions = findall(attention_mask[:, column_index] .== 1)
-        for i in 1:(length(valid_positions) - 1)
-            labels[valid_positions[i], column_index] = ids[valid_positions[i + 1], column_index]
-        end
-    end
-    return labels
-end
-
-collated = tiny_pad_batch(batch_results; pad_token_id=pad_id(tokenizer))
-labels = tiny_causal_labels(collated.ids, collated.attention_mask; ignore_index=-100)
-labels_zero_based = map(label -> label == -100 ? -100 : label - 1, labels)
-
-@assert size(collated.ids) == size(collated.attention_mask)
-@assert size(labels) == size(collated.ids)
+@assert size(training_batch.ids) == size(training_batch.attention_mask)
+@assert size(training_batch.labels) == size(training_batch.ids)
 
 (
-    ids_size=size(collated.ids),
-    labels_size=size(labels),
-    ignore_index_count=count(==(-100), labels),
-    labels_zero_based=labels_zero_based,
+    ids_size=size(training_batch.ids),
+    labels_size=size(training_batch.labels),
+    ignore_index_count=count(==(-100), training_batch.labels),
+    pad_token_id=training_batch.pad_token_id,
 )
 ```
 
 - **What you should see:**
   - `ids`, `attention_mask`, and `labels` all share the same matrix shape.
   - `ignore_index_count` is positive (padding and final-token masking).
-  - `labels_zero_based` keeps `-100` unchanged and subtracts 1 from valid ids.
+  - `pad_token_id` is inferred from tokenizer `pad_id` or `eos_id`.
 - **Concerns and setup notes:**
   - KeemenaSubwords ids are 1-based.
   - `ignore_index=-100` is the common causal LM training convention.
   - Final valid token in each sequence should remain ignored.
 - **Next:** go to [Structured Outputs and Batching](structured_outputs_and_batching.md) for fuller collation, causal labels, and block packing.
+
+#### What `quick_causal_lm_batch` does under the hood
+
+```@example quick_guide_p6_under_hood
+using KeemenaSubwords
+
+tokenizer = load_tokenizer(:core_wordpiece_en)
+input_texts = ["hello world", "hello"]
+
+batch_encoding = quick_encode_batch(
+    tokenizer,
+    input_texts;
+    add_special_tokens=true,
+    return_offsets=false,
+    return_masks=true,
+)
+
+collated = collate_padded_batch(batch_encoding.results; tokenizer=tokenizer)
+labels = causal_lm_labels(collated.ids, collated.attention_mask; ignore_index=-100, zero_based=false)
+
+(
+    sequence_lengths=batch_encoding.sequence_lengths,
+    ids_size=size(collated.ids),
+    labels_size=size(labels),
+)
+```
 
 ### P7: Export to Hugging Face tokenizer.json for Python
 
@@ -444,10 +495,9 @@ Training APIs are experimental and may evolve faster than pretrained loading and
 - **You want:** a trained tokenizer bundle you can reload reproducibly.
 - **Objective:** run a fully local training round trip without network access.
 - **Steps:**
-  1. Call `train_wordpiece_result(corpus; ...)`.
-  2. Save assets with `save_training_bundle(...)`.
-  3. Reload with `load_training_bundle(...)`.
-  4. Run `encode` and `decode` as a sanity check.
+  1. Call `quick_train_bundle(:wordpiece, corpus; ...)`.
+  2. Read `bundle_files` and `tokenizer`.
+  3. Confirm sanity ids and decoded text from the returned fields.
 
 ```@example quick_guide_t1
 using KeemenaSubwords
@@ -458,11 +508,39 @@ training_corpus = [
     "world of subwords",
 ]
 
-training_result = train_wordpiece_result(
+training_output = quick_train_bundle(
+    :wordpiece,
     training_corpus;
     vocab_size=64,
     min_frequency=1,
+    sanity_text="hello world",
 )
+
+(
+    bundle_directory=training_output.bundle_directory,
+    bundle_files=training_output.bundle_files,
+    sanity_encoded_ids=training_output.sanity_encoded_ids,
+    sanity_decoded_text=training_output.sanity_decoded_text,
+)
+```
+
+- **What you should see:**
+  - `bundle_files` includes tokenizer exports and the training manifest.
+  - Returned tokenizer has already been reloaded from bundle.
+  - Workflow is deterministic for the same corpus and config.
+- **Concerns and setup notes:**
+  - The bundle gives reproducible reload without remembering loader kwargs.
+  - `quick_train_bundle` currently supports `:wordpiece` plus HF preset trainer symbols.
+  - Avoid asserting exact token ids across different configs.
+- **Next:** full API and preset coverage are in [Training (experimental)](training.md).
+
+#### What `quick_train_bundle` does under the hood
+
+```@example quick_guide_t1_under_hood
+using KeemenaSubwords
+
+training_corpus = ["hello world", "hello tokenizer", "world tokenizer"]
+training_result = train_wordpiece_result(training_corpus; vocab_size=48, min_frequency=1)
 
 bundle_directory = mktempdir()
 save_training_bundle(training_result, bundle_directory; overwrite=true)
@@ -470,23 +548,13 @@ reloaded_tokenizer = load_training_bundle(bundle_directory)
 
 encoded_ids = encode(reloaded_tokenizer, "hello world"; add_special_tokens=false)
 decoded_text = decode(reloaded_tokenizer, encoded_ids)
-bundle_files = sort(readdir(bundle_directory))
 
 (
+    bundle_files=sort(readdir(bundle_directory)),
     encoded_ids=encoded_ids,
     decoded_text=decoded_text,
-    bundle_files=bundle_files,
 )
 ```
-
-- **What you should see:**
-  - `bundle_files` includes tokenizer exports and manifest files.
-  - Reloaded tokenizer can encode and decode.
-  - Workflow is deterministic for the same corpus and config.
-- **Concerns and setup notes:**
-  - The bundle gives reproducible reload without remembering loader kwargs.
-  - Avoid asserting exact token ids across different configs.
-- **Next:** full API and preset coverage are in [Training (experimental)](training.md).
 
 ### T2: Train HF BERT WordPiece preset and export tokenizer.json
 

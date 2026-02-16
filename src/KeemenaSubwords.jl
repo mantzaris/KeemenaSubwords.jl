@@ -37,6 +37,7 @@ using .Training: train_bpe,
     save_training_bundle,
     load_training_bundle
 include("io.jl")
+include("orchestration.jl")
 
 export AbstractSubwordTokenizer,
        TokenizerMetadata,
@@ -85,6 +86,12 @@ export AbstractSubwordTokenizer,
        encode,
        encode_result,
        encode_batch_result,
+       quick_tokenize,
+       quick_encode_batch,
+       collate_padded_batch,
+       causal_lm_labels,
+       quick_causal_lm_batch,
+       quick_train_bundle,
        decode,
        token_to_id,
        id_to_token,
