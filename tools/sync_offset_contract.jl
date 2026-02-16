@@ -18,6 +18,53 @@ function _normalize_newlines(text::String)::String
     return endswith(normalized, "\n") ? normalized : normalized * "\n"
 end
 
+function _split_lines(text::String)::Vector{String}
+    return split(chomp(text), "\n"; keepempty=true)
+end
+
+function _truncate_line(line::AbstractString; limit::Int=200)::String
+    line_str = String(line)
+    if length(line_str) <= limit || limit <= 3
+        return line_str
+    end
+    return string(first(line_str, limit - 3), "...")
+end
+
+function _print_mismatch_diagnostics(source_text::String, target_text::String)::Nothing
+    source_lines = _split_lines(source_text)
+    target_lines = _split_lines(target_text)
+    common_length = min(length(source_lines), length(target_lines))
+
+    first_mismatch = nothing
+    for i in 1:common_length
+        if source_lines[i] != target_lines[i]
+            first_mismatch = i
+            break
+        end
+    end
+
+    if first_mismatch !== nothing
+        line_index = first_mismatch::Int
+        println(stderr, "  first mismatch line: $line_index")
+        println(stderr, "  source line: ", repr(_truncate_line(source_lines[line_index])))
+        println(stderr, "  target line: ", repr(_truncate_line(target_lines[line_index])))
+        return nothing
+    end
+
+    line_index = common_length + 1
+    println(stderr, "  first mismatch line: $line_index")
+    if length(source_lines) > length(target_lines)
+        println(stderr, "  source has extra trailing lines starting at line $line_index.")
+        println(stderr, "  source line: ", repr(_truncate_line(source_lines[line_index])))
+        println(stderr, "  target line: <no line>")
+    else
+        println(stderr, "  target has extra trailing lines starting at line $line_index.")
+        println(stderr, "  source line: <no line>")
+        println(stderr, "  target line: ", repr(_truncate_line(target_lines[line_index])))
+    end
+    return nothing
+end
+
 function main(args::Vector{String})::Int
     check_mode = false
     for arg in args
@@ -41,9 +88,10 @@ function main(args::Vector{String})::Int
             println("Offset contract is in sync.")
             return 0
         end
-        println(stderr, "Offset contract is out of sync:")
+        println(stderr, "Offset contract is out of sync.")
         println(stderr, "  source: $SOURCE")
         println(stderr, "  target: $TARGET")
+        _print_mismatch_diagnostics(source_text, target_text)
         println(stderr, "Run: julia --project=. tools/sync_offset_contract.jl")
         return 1
     end

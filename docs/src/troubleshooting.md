@@ -1,5 +1,20 @@
 # Troubleshooting
 
+## Offset contract sync check fails
+
+The check `julia --project=. tools/sync_offset_contract.jl --check` enforces
+that `notes/OffsetContract.md` (source) and
+`docs/src/normalization_offsets_contract.md` (generated target) match after
+newline normalization.
+
+Do not hand-edit `docs/src/normalization_offsets_contract.md`. Edit
+`notes/OffsetContract.md`, then run:
+
+```julia
+julia --project=. tools/sync_offset_contract.jl
+julia --project=. tools/sync_offset_contract.jl --check
+```
+
 ## Auto-detect picked the wrong format
 
 Force the format explicitly:

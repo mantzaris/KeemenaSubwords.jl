@@ -1,3 +1,5 @@
+<!-- Source of truth: notes/OffsetContract.md. Synced to docs/src/normalization_offsets_contract.md by tools/sync_offset_contract.jl. Edit source then run the sync tool. -->
+
 # Normalization and Offsets Contract
 
 This document is the canonical contract for normalization and offsets behavior in
