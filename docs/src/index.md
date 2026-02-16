@@ -10,6 +10,14 @@ KeemenaSubwords provides Julia-native loaders and tokenization primitives for:
 - tiktoken,
 - Hugging Face `tokenizer.json`.
 
+## Start Here
+
+If you are new to the package, start with [Concepts](concepts.md) for the core contracts and first-hour workflows.
+
+- Token ids are 1-based in KeemenaSubwords.
+- Offsets are UTF-8 codeunit half-open spans: `[start, stop)`.
+- Byte-level tokenizers can emit offsets that are valid codeunit spans but not always safe Julia string slice boundaries on multibyte text.
+
 ## Quick Start
 
 ```julia
@@ -48,6 +56,7 @@ install_model!(:llama3_8b_tokenizer; token=ENV["HF_TOKEN"])
 
 ## Documentation Map
 
+- [Concepts](concepts.md)
 - [Built-in model inventory](models.md)
 - [Normalization and offsets contract](normalization_offsets_contract.md)
 - [Training (experimental)](training.md)

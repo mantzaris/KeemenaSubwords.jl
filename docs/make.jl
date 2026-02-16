@@ -21,6 +21,7 @@ makedocs(
     checkdocs = :exports,              # complain only for *exported* names :contentReference[oaicite:0]{index=0}
     pages = [
         "Home"          => "index.md",
+        "Concepts"      => "concepts.md",
         "Integration"   => "integration.md",
         "Normalization & Offsets" => "normalization_offsets_contract.md",
         "Loading"       => "loading.md",

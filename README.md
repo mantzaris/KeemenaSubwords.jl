@@ -32,6 +32,38 @@ install_model!(:llama3_8b_tokenizer; token=ENV["HF_TOKEN"])
 llama = load_tokenizer(:llama3_8b_tokenizer)
 ```
 
+## Key concepts
+
+- KeemenaSubwords token ids are 1-based.
+- Use `encode_result(...; return_offsets=true, return_masks=true)` when you need ids plus alignment metadata.
+- Offsets are UTF-8 codeunit half-open spans (`[start, stop)`), with `(0, 0)` as the no-span sentinel.
+- Start with [Concepts](https://mantzaris.github.io/KeemenaSubwords.jl/dev/concepts/) and the [Normalization and Offsets Contract](https://mantzaris.github.io/KeemenaSubwords.jl/dev/normalization_offsets_contract/).
+
+## Structured encode example
+
+```julia
+using KeemenaSubwords
+
+tok = load_tokenizer(:core_bpe_en)
+text = "hello world"
+tokenization_text = tokenization_view(tok, text)
+
+result = encode_result(
+    tok,
+    tokenization_text;
+    assume_normalized=true,
+    add_special_tokens=true,
+    return_offsets=true,
+    return_masks=true,
+)
+
+result.ids
+result.tokens
+result.offsets
+result.special_tokens_mask
+# Offsets are UTF-8 codeunit spans and may not always be safe Julia string slice boundaries for byte-level tokenizers.
+```
+
 ## Featured Models
 
 _Generated from registry metadata via `tools/sync_readme_models.jl`._
@@ -44,7 +76,9 @@ _Generated from registry metadata via `tools/sync_readme_models.jl`._
 
 ## Documentation
 
+- [Concepts](https://mantzaris.github.io/KeemenaSubwords.jl/dev/concepts/)
 - [Models](https://mantzaris.github.io/KeemenaSubwords.jl/dev/models/)
+- [Normalization and Offsets Contract](https://mantzaris.github.io/KeemenaSubwords.jl/dev/normalization_offsets_contract/)
 - [Training (Experimental)](https://mantzaris.github.io/KeemenaSubwords.jl/dev/training/)
 - [Formats and Required Files](https://mantzaris.github.io/KeemenaSubwords.jl/dev/formats/)
 - [Loading Tokenizers From Local Paths](https://mantzaris.github.io/KeemenaSubwords.jl/dev/loading_local/)
