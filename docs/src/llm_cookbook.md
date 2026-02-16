@@ -1,56 +1,86 @@
 # LLM Cookbook
 
-## OpenAI tiktoken encodings
+Practical recipes for model selection, installation, and interop workflows.
+
+Quick links:
+
+- [Structured Outputs and Batching](structured_outputs_and_batching.md)
+- [Offsets Alignment Examples](offset_alignment_examples.md)
+- [Tokenizer Formats and Required Files](formats.md)
+- [Installable Gated Models](gated_models.md)
+
+## Recipe 1: Pick recommended defaults and prefetch
 
 ```julia
-prefetch_models([:tiktoken_cl100k_base, :tiktoken_o200k_base])
-tt = load_tokenizer(:tiktoken_cl100k_base)
-encode(tt, "hello world")
+using KeemenaSubwords
+
+keys = recommended_defaults_for_llms()
+prefetch_models(keys)
+
+for key in keys
+    println(key, " => ", describe_model(key).format)
+end
 ```
 
-## Mistral SentencePiece
+Use this as the first step when you want a curated, ready-to-load starting set.
+
+## Recipe 2: Load and encode with one recommended model
 
 ```julia
-prefetch_models([:mistral_v3_sentencepiece])
-mistral = load_tokenizer(:mistral_v3_sentencepiece)
+using KeemenaSubwords
+
+key = first(recommended_defaults_for_llms())
+tokenizer = load_tokenizer(key)
+
+tokenization_text = tokenization_view(tokenizer, "hello world")
+result = encode_result(
+    tokenizer,
+    tokenization_text;
+    assume_normalized=true,
+    return_offsets=true,
+    return_masks=true,
+    add_special_tokens=true,
+)
+
+(key=key, ids=result.ids, tokens=result.tokens)
 ```
 
-## Qwen tokenizer.json-first loading
+For training-ready batch tensors and padding, continue with
+[Structured Outputs and Batching](structured_outputs_and_batching.md).
+
+## Recipe 3: Gated install workflow (LLaMA)
 
 ```julia
-prefetch_models([:qwen2_5_bpe])
-qwen = load_tokenizer(:qwen2_5_bpe)
-```
+using KeemenaSubwords
 
-## LLaMA workflow A: install (gated)
-
-```julia
 install_model!(:llama3_8b_tokenizer; token=ENV["HF_TOKEN"])
 llama = load_tokenizer(:llama3_8b_tokenizer)
 ```
 
-## LLaMA workflow B: manual local path
+You must have accepted upstream license terms and have valid model access.
+
+## Recipe 4: Manual local-path loading for LLaMA tokenizers
 
 ```julia
-# SentencePiece-style
+using KeemenaSubwords
+
+# LLaMA2-style SentencePiece
 llama2 = load_tokenizer("/path/to/tokenizer.model"; format=:sentencepiece_model)
 
 # LLaMA3-style tokenizer.model with tiktoken text
 llama3 = load_tokenizer("/path/to/tokenizer.model"; format=:tiktoken)
 ```
 
-## Pick practical defaults
+## Recipe 5: Export tokenizer.json for Python Fast tokenizers
 
 ```julia
-for key in recommended_defaults_for_llms()
-    println(key)
-end
+using KeemenaSubwords
+
+tokenizer = load_tokenizer(:core_wordpiece_en)
+export_tokenizer(tokenizer, "out_tokenizer"; format=:hf_tokenizer_json)
 ```
 
-## Tokenizer.json roadmap (no Python needed)
-
-Near-term roadmap items (in scope for this package):
-- expand Hugging Face component coverage incrementally (normalizers, pre-tokenizers, post-processors, decoders),
-- add optional richer encode outputs (`offsets`, `attention_mask`, `token_type_ids`) in a structured return type,
-- add a small number of additional curated flagship tokenizers where redistribution/license terms are clear,
-- continue performance hardening for BPE merge caching, WordPiece trie lookup, Unigram DP, and added-token matching.
+```python
+from transformers import PreTrainedTokenizerFast
+tok = PreTrainedTokenizerFast(tokenizer_file="out_tokenizer/tokenizer.json")
+```

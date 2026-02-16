@@ -2,17 +2,98 @@
 
 `detect_tokenizer_format(path)` and `load_tokenizer(path; format=:auto)` use the same detection rules. You can always override detection with `format=...`.
 
-| Format Symbol | Accepted Input | Required Files | Canonical Named Spec Keys | Recommended Call |
-| --- | --- | --- | --- | --- |
-| `:hf_tokenizer_json` | file or directory | `tokenizer.json` | `path` (alias: `tokenizer_json`) | `load_hf_tokenizer_json("/path/to/tokenizer.json")` |
-| `:bpe_gpt2` | file pair or directory | `vocab.json` + `merges.txt` | `vocab_json`, `merges_txt` | `load_bpe_gpt2("/path/to/vocab.json", "/path/to/merges.txt")` |
-| `:bpe_encoder` | file pair or directory | `encoder.json` + `vocab.bpe` | `encoder_json`, `vocab_bpe` | `load_bpe_encoder("/path/to/encoder.json", "/path/to/vocab.bpe")` |
-| `:bpe` | directory or `vocab.txt` file | `vocab.txt` + `merges.txt` | `vocab`, `merges` (tuple/spec) | `load_bpe("/path/to/model_dir")` |
-| `:bytebpe` | directory or file pair | `vocab.txt` + `merges.txt` | `vocab`, `merges` (tuple/spec) | `load_bytebpe("/path/to/model_dir")` |
-| `:wordpiece` / `:wordpiece_vocab` | file or directory | `vocab.txt` | `path` (alias: `vocab_txt`) | `load_wordpiece("/path/to/vocab.txt")` |
-| `:sentencepiece_model` | file or directory | Standard SentencePiece binary `.model`/`.model.v3` files, or Keemena text-exported `.model` files (`spm.model`, `spiece.model`, `tokenizer.model`, `tokenizer.model.v3`, `sentencepiece.bpe.model`) | `path` (alias: `model_file`) | `load_sentencepiece("/path/to/tokenizer.model"; kind=:auto)` |
-| `:tiktoken` | file or directory | `*.tiktoken` or tiktoken-text `tokenizer.model` | `path` (alias: `encoding_file`) | `load_tiktoken("/path/to/o200k_base.tiktoken")` |
-| `:unigram` | file or directory | `unigram.tsv` | `path` (alias: `unigram_tsv`) | `load_unigram("/path/to/unigram.tsv")` |
+## `:hf_tokenizer_json`
+
+- Format symbol: `:hf_tokenizer_json`
+- Accepted input: file or directory
+- Required files: `tokenizer.json`
+- Canonical named spec key: `path` (alias: `tokenizer_json`)
+- Recommended loader:
+  `load_hf_tokenizer_json("/path/to/tokenizer.json")`
+- Offset behavior: depends on pipeline components. If ByteLevel is configured, apply byte-level offset caveats.
+
+## `:bpe_gpt2`
+
+- Format symbol: `:bpe_gpt2`
+- Accepted input: file pair or directory
+- Required files: `vocab.json` + `merges.txt`
+- Canonical named spec keys: `vocab_json`, `merges_txt`
+- Recommended loader:
+  `load_bpe_gpt2("/path/to/vocab.json", "/path/to/merges.txt")`
+- Offset behavior: byte-level family. Offsets are codeunit spans and may not always be safe Julia string slice boundaries on multibyte text.
+
+## `:bpe_encoder`
+
+- Format symbol: `:bpe_encoder`
+- Accepted input: file pair or directory
+- Required files: `encoder.json` + `vocab.bpe`
+- Canonical named spec keys: `encoder_json`, `vocab_bpe`
+- Recommended loader:
+  `load_bpe_encoder("/path/to/encoder.json", "/path/to/vocab.bpe")`
+- Offset behavior: byte-level family with the same slicing caveat as `:bpe_gpt2`.
+
+## `:bpe`
+
+- Format symbol: `:bpe`
+- Accepted input: directory or `vocab.txt` file
+- Required files: `vocab.txt` + `merges.txt`
+- Canonical named spec keys: `vocab`, `merges` (tuple/spec)
+- Recommended loader:
+  `load_bpe("/path/to/model_dir")`
+- Offset behavior: non-byte-level in standard usage; spanful offsets are expected to be string-safe.
+
+## `:bytebpe`
+
+- Format symbol: `:bytebpe`
+- Accepted input: directory or file pair
+- Required files: `vocab.txt` + `merges.txt`
+- Canonical named spec keys: `vocab`, `merges` (tuple/spec)
+- Recommended loader:
+  `load_bytebpe("/path/to/model_dir")`
+- Offset behavior: byte-level family. Use `try_span_substring` with `span_codeunits` fallback for non-boundary spans.
+
+## `:wordpiece` / `:wordpiece_vocab`
+
+- Format symbols: `:wordpiece`, `:wordpiece_vocab`
+- Accepted input: file or directory
+- Required files: `vocab.txt`
+- Canonical named spec key: `path` (alias: `vocab_txt`)
+- Recommended loader:
+  `load_wordpiece("/path/to/vocab.txt")`
+- Offset behavior: non-byte-level; spanful offsets are expected to be string-safe in normal usage.
+
+## `:sentencepiece_model`
+
+- Format symbol: `:sentencepiece_model`
+- Accepted input: file or directory
+- Required files:
+  standard SentencePiece binary `.model` / `.model.v3`,
+  or Keemena text-exported model files
+  (`spm.model`, `spiece.model`, `tokenizer.model`, `tokenizer.model.v3`, `sentencepiece.bpe.model`)
+- Canonical named spec key: `path` (alias: `model_file`)
+- Recommended loader:
+  `load_sentencepiece("/path/to/tokenizer.model"; kind=:auto)`
+- Offset behavior: usually non-byte-level. Spanful offsets are expected to be string-safe for standard SentencePiece pipelines.
+
+## `:tiktoken`
+
+- Format symbol: `:tiktoken`
+- Accepted input: file or directory
+- Required files: `*.tiktoken` or tiktoken-text `tokenizer.model`
+- Canonical named spec key: `path` (alias: `encoding_file`)
+- Recommended loader:
+  `load_tiktoken("/path/to/o200k_base.tiktoken")`
+- Offset behavior: byte-level family with non-boundary span cases on multibyte text.
+
+## `:unigram` / `:unigram_tsv`
+
+- Format symbols: `:unigram`, `:unigram_tsv`
+- Accepted input: file or directory
+- Required files: `unigram.tsv`
+- Canonical named spec key: `path` (alias: `unigram_tsv`)
+- Recommended loader:
+  `load_unigram("/path/to/unigram.tsv")`
+- Offset behavior: non-byte-level; spanful offsets are expected to be string-safe in normal usage.
 
 ## Exporting Hugging Face `tokenizer.json`
 

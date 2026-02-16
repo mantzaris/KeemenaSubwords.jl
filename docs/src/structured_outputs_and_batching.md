@@ -170,3 +170,111 @@ collated = pad_batch(batch_results; pad_id = pad_id(tokenizer))
     special_tokens_mask = collated.special_tokens_mask,
 )
 ```
+
+## Example 4: Causal LM Labels (Next-Token Prediction)
+
+Policy in this example:
+
+- `ignore_index = -100` for all padded positions,
+- `ignore_index = -100` for the final valid token in each sequence (no next token target),
+- labels otherwise point to the next valid token id.
+
+```@example structured_outputs_batching
+function causal_lm_labels(
+    ids::AbstractMatrix{<:Integer},
+    attention_mask::AbstractMatrix{<:Integer};
+    ignore_index::Int = -100,
+)::Matrix{Int}
+    size(ids) == size(attention_mask) || throw(ArgumentError("ids and attention_mask must have the same shape"))
+
+    seq_len, batch_size = size(ids)
+    labels = fill(ignore_index, seq_len, batch_size)
+
+    for col in 1:batch_size
+        valid_positions = findall(attention_mask[:, col] .== 1)
+        isempty(valid_positions) && continue
+
+        for i in 1:(length(valid_positions) - 1)
+            pos = valid_positions[i]
+            next_pos = valid_positions[i + 1]
+            labels[pos, col] = ids[next_pos, col]
+        end
+
+        labels[last(valid_positions), col] = ignore_index
+    end
+
+    return labels
+end
+
+labels = causal_lm_labels(collated.ids, collated.attention_mask; ignore_index=-100)
+
+# KeemenaSubwords ids are 1-based. Convert only if an external consumer expects 0-based ids.
+labels_zero_based = map(labels) do label
+    label == -100 ? -100 : label - 1
+end
+
+(
+    ids = collated.ids,
+    attention_mask = collated.attention_mask,
+    labels = labels,
+    labels_zero_based = labels_zero_based,
+)
+```
+
+## Example 5: Pack Sequences Into Fixed-Length Blocks
+
+This recipe concatenates sequence ids, optionally inserts a separator id between sequences, then chunks into fixed-length blocks.
+
+```@example structured_outputs_batching
+function pack_blocks(
+    results::Vector{TokenizationResult};
+    block_size::Int,
+    pad_id::Int,
+    eos_id::Union{Nothing,Int}=nothing,
+)
+    block_size > 0 || throw(ArgumentError("block_size must be > 0"))
+
+    flat_ids = Int[]
+    for (i, result) in pairs(results)
+        append!(flat_ids, result.ids)
+        if eos_id !== nothing && i < length(results)
+            push!(flat_ids, eos_id)
+        end
+    end
+
+    n_blocks = max(1, cld(length(flat_ids), block_size))
+    ids_blocks = fill(pad_id, block_size, n_blocks)
+    attention_mask_blocks = fill(0, block_size, n_blocks)
+
+    for (flat_index, token_id) in pairs(flat_ids)
+        block_index = cld(flat_index, block_size)
+        row_index = flat_index - (block_index - 1) * block_size
+        ids_blocks[row_index, block_index] = token_id
+        attention_mask_blocks[row_index, block_index] = 1
+    end
+
+    return (
+        ids_blocks = ids_blocks,
+        attention_mask_blocks = attention_mask_blocks,
+        total_tokens = length(flat_ids),
+    )
+end
+
+separator_id = get(special_tokens(tokenizer), :sep, nothing)
+packed = pack_blocks(
+    batch_results;
+    block_size=6,
+    pad_id=pad_id(tokenizer),
+    eos_id=separator_id,
+)
+
+(
+    separator_id = separator_id,
+    ids_blocks_size = size(packed.ids_blocks),
+    attention_mask_blocks_size = size(packed.attention_mask_blocks),
+    ids_blocks = packed.ids_blocks,
+    attention_mask_blocks = packed.attention_mask_blocks,
+)
+```
+
+For span-to-token label alignment (for example NER-style supervision), see [Offsets Alignment Examples](offset_alignment_examples.md).

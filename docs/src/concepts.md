@@ -45,15 +45,34 @@ ids_julia = ids_zero_based .+ 1
 
 ## Tokenizer Families Supported
 
-| Family | Typical format symbols | Typically byte-level | Offset implication |
-| --- | --- | --- | --- |
-| BPE (classic) | `:bpe` | No | Spanful offsets are expected to be string-safe in normal usage. |
-| ByteBPE | `:bytebpe` | Yes | Offsets are valid codeunit spans, but may not always be safe string slice boundaries on multibyte text. |
-| WordPiece | `:wordpiece`, `:wordpiece_vocab` | No | Spanful offsets are expected to be string-safe in normal usage. |
-| Unigram TSV | `:unigram`, `:unigram_tsv` | No | Spanful offsets are expected to be string-safe in normal usage. |
-| SentencePiece model | `:sentencepiece_model` | Usually no | Spanful offsets are expected to be string-safe for standard SentencePiece pipelines. |
-| tiktoken | `:tiktoken` | Yes | Same byte-level caveat as ByteBPE. |
-| HF tokenizer.json | `:hf_tokenizer_json` | Depends on pipeline | If ByteLevel components are present, use byte-level caveats for offsets. |
+- BPE (classic)
+  - Typical format symbols: `:bpe`
+  - Byte-level: no
+  - Offset implication: spanful offsets are expected to be string-safe in normal usage.
+- ByteBPE
+  - Typical format symbols: `:bytebpe`
+  - Byte-level: yes
+  - Offset implication: offsets are valid codeunit spans, but may not always be safe Julia string slice boundaries on multibyte text.
+- WordPiece
+  - Typical format symbols: `:wordpiece`, `:wordpiece_vocab`
+  - Byte-level: no
+  - Offset implication: spanful offsets are expected to be string-safe in normal usage.
+- Unigram TSV
+  - Typical format symbols: `:unigram`, `:unigram_tsv`
+  - Byte-level: no
+  - Offset implication: spanful offsets are expected to be string-safe in normal usage.
+- SentencePiece model
+  - Typical format symbols: `:sentencepiece_model`
+  - Byte-level: usually no
+  - Offset implication: spanful offsets are expected to be string-safe for standard SentencePiece pipelines.
+- tiktoken
+  - Typical format symbols: `:tiktoken`
+  - Byte-level: yes
+  - Offset implication: use the same byte-level caveat as ByteBPE.
+- HF tokenizer.json
+  - Typical format symbols: `:hf_tokenizer_json`
+  - Byte-level: depends on configured pipeline components
+  - Offset implication: when ByteLevel components are present, use byte-level offset caveats.
 
 ## Special Tokens And `add_special_tokens`
 

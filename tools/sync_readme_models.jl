@@ -7,7 +7,8 @@ const DOCS_MODELS_PATH = normpath(joinpath(@__DIR__, "..", "docs", "src", "model
 
 const README_FEATURED_START = "## Featured Models"
 const README_FEATURED_END = "## Documentation"
-const DOCS_MODELS_START = "The table below is generated from the same registry used by `available_models()` and `describe_model(...)`."
+const DOCS_MODELS_START = "The inventory below is generated from the same registry used by `available_models()` and `describe_model(...)`."
+const DOCS_MODELS_START_LEGACY = "The table below is generated from the same registry used by `available_models()` and `describe_model(...)`."
 const DOCS_MODELS_END = "`describe_model(key)` includes provenance metadata such as `license`, `family`, `distribution`, `upstream_repo`, `upstream_ref`, and `upstream_files`."
 
 const FEATURED_MODEL_PRIORITY = [
@@ -29,11 +30,8 @@ function _regex_escape(value::AbstractString)::String
     return replace(String(value), r"([\\.^$|?*+(){}\[\]])" => s"\\\1")
 end
 
-function _escape_cell(value)::String
-    text = String(value)
-    text = replace(text, "\n" => " ")
-    text = replace(text, "|" => "\\|")
-    return text
+function _single_line(value)::String
+    return replace(String(value), "\n" => " ")
 end
 
 function _collect_rows()
@@ -99,7 +97,7 @@ function _render_featured_list(rows)::String
     return join(lines, "\n")
 end
 
-function _render_inventory_table(rows)::String
+function _render_inventory_list(rows)::String
     lines = String["_Generated from the registry by `tools/sync_readme_models.jl` (excluding `:user_local` entries)._", ""]
 
     active_group = nothing
@@ -111,21 +109,15 @@ function _render_inventory_table(rows)::String
             end
             push!(lines, "### `$(row.format)` / `$(row.family)`")
             push!(lines, "")
-            push!(lines, "| Key | Distribution | License | Upstream Repo | Upstream Ref | Expected Files | Description |")
-            push!(lines, "| --- | --- | --- | --- | --- | --- | --- |")
             active_group = group
         end
 
-        push!(lines, string(
-            "| `:", row.key,
-            "` | `", row.distribution,
-            "` | `", row.license,
-            "` | `", _escape_cell(row.upstream_repo),
-            "` | `", _escape_cell(row.upstream_ref),
-            "` | ", _escape_cell(row.expected_files),
-            " | ", _escape_cell(row.description),
-            " |",
-        ))
+        push!(lines, "- `:$(row.key)`")
+        push!(lines, "  - Distribution: `$(row.distribution)`")
+        push!(lines, "  - License: `$(row.license)`")
+        push!(lines, string("  - Upstream: `", _single_line(row.upstream_repo), "` @ `", _single_line(row.upstream_ref), "`"))
+        push!(lines, string("  - Expected files: ", _single_line(row.expected_files)))
+        push!(lines, string("  - Description: ", _single_line(row.description)))
     end
 
     return join(lines, "\n")
@@ -137,9 +129,12 @@ function _replace_marked_section(
     end_marker::AbstractString,
     content::AbstractString;
     check::Bool,
+    search_start_markers::Vector{String}=String[String(start_marker)],
 )::Bool
     text = read(path, String)
-    pattern = Regex("(?s)" * _regex_escape(start_marker) * ".*?" * _regex_escape(end_marker))
+    escaped_start_markers = _regex_escape.(search_start_markers)
+    marker_pattern = "(?:" * join(escaped_start_markers, "|") * ")"
+    pattern = Regex("(?s)" * marker_pattern * ".*?" * _regex_escape(end_marker))
     occursin(pattern, text) || throw(ArgumentError("Missing marker block in $(path): $(start_marker) ... $(end_marker)"))
 
     replacement = string(start_marker, "\n\n", content, "\n\n", end_marker)
@@ -161,7 +156,7 @@ function main()::Nothing
     check_mode = any(arg -> arg in ("--check", "-c"), ARGS)
     rows = _collect_rows()
     featured_content = _render_featured_list(rows)
-    table_content = _render_inventory_table(rows)
+    inventory_content = _render_inventory_list(rows)
 
     if check_mode
         ok_readme = _replace_marked_section(
@@ -175,8 +170,9 @@ function main()::Nothing
             DOCS_MODELS_PATH,
             DOCS_MODELS_START,
             DOCS_MODELS_END,
-            table_content;
+            inventory_content;
             check=true,
+            search_start_markers=String[DOCS_MODELS_START, DOCS_MODELS_START_LEGACY],
         )
 
         if ok_readme && ok_docs
@@ -198,8 +194,9 @@ function main()::Nothing
         DOCS_MODELS_PATH,
         DOCS_MODELS_START,
         DOCS_MODELS_END,
-        table_content;
+        inventory_content;
         check=false,
+        search_start_markers=String[DOCS_MODELS_START, DOCS_MODELS_START_LEGACY],
     )
 
     if changed_readme || changed_docs
