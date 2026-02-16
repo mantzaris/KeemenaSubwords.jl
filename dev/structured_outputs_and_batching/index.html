@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Structured Outputs and Batching · KeemenaSubwords.jl</title><meta name="title" content="Structured Outputs and Batching · KeemenaSubwords.jl"/><meta property="og:title" content="Structured Outputs and Batching · KeemenaSubwords.jl"/><meta property="twitter:title" content="Structured Outputs and Batching · KeemenaSubwords.jl"/><meta name="description" content="Documentation for KeemenaSubwords.jl."/><meta property="og:description" content="Documentation for KeemenaSubwords.jl."/><meta property="twitter:description" content="Documentation for KeemenaSubwords.jl."/><meta property="og:url" content="https://mantzaris.github.io/KeemenaSubwords.jl/structured_outputs_and_batching/"/><meta property="twitter:url" content="https://mantzaris.github.io/KeemenaSubwords.jl/structured_outputs_and_batching/"/><link rel="canonical" href="https://mantzaris.github.io/KeemenaSubwords.jl/structured_outputs_and_batching/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">KeemenaSubwords.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><a class="tocitem" href="../concepts/">Concepts</a></li><li class="is-active"><a class="tocitem" href>Structured Outputs and Batching</a><ul class="internal"><li><a class="tocitem" href="#TokenizationResult-Fields-And-Invariants"><span><code>TokenizationResult</code> Fields And Invariants</span></a></li><li><a class="tocitem" href="#Example-1:-Inspect-encode_result-Output"><span>Example 1: Inspect <code>encode_result</code> Output</span></a></li><li><a class="tocitem" href="#Example-2:-encode_batch_result-Returns-Per-Sequence-Outputs"><span>Example 2: <code>encode_batch_result</code> Returns Per-Sequence Outputs</span></a></li><li><a class="tocitem" href="#Example-3:-Padding-Collator-Recipe"><span>Example 3: Padding Collator Recipe</span></a></li></ul></li><li><a class="tocitem" href="../integration/">Integration</a></li><li><a class="tocitem" href="../normalization_offsets_contract/">Normalization &amp; Offsets</a></li><li><a class="tocitem" href="../offset_alignment_examples/">Offsets Alignment Examples</a></li><li><a class="tocitem" href="../loading/">Loading</a></li><li><a class="tocitem" href="../training/">Training</a></li><li><a class="tocitem" href="../formats/">Formats</a></li><li><a class="tocitem" href="../loading_local/">Loading Local</a></li><li><a class="tocitem" href="../llm_cookbook/">LLM Cookbook</a></li><li><a class="tocitem" href="../gated_models/">Gated Models</a></li><li><a class="tocitem" href="../troubleshooting/">Troubleshooting</a></li><li><a class="tocitem" href="../models/">Built-In Models</a></li><li><a class="tocitem" href="../api/">API Reference</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Structured Outputs and Batching</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Structured Outputs and Batching</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/mantzaris/KeemenaSubwords.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/mantzaris/KeemenaSubwords.jl/blob/main/docs/src/structured_outputs_and_batching.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Structured-Outputs-and-Batching"><a class="docs-heading-anchor" href="#Structured-Outputs-and-Batching">Structured Outputs and Batching</a><a id="Structured-Outputs-and-Batching-1"></a><a class="docs-heading-anchor-permalink" href="#Structured-Outputs-and-Batching" title="Permalink"></a></h1><p>This page shows practical recipes for turning tokenizer outputs into training-ready batch tensors and label alignments.</p><h2 id="TokenizationResult-Fields-And-Invariants"><a class="docs-heading-anchor" href="#TokenizationResult-Fields-And-Invariants"><code>TokenizationResult</code> Fields And Invariants</a><a id="TokenizationResult-Fields-And-Invariants-1"></a><a class="docs-heading-anchor-permalink" href="#TokenizationResult-Fields-And-Invariants" title="Permalink"></a></h2><p><code>encode_result</code> and <code>encode_batch_result</code> return <code>TokenizationResult</code> values with:</p><ul><li><code>ids</code>: token ids (<code>Vector{Int}</code>), using KeemenaSubwords 1-based id space.</li><li><code>tokens</code>: token strings (<code>Vector{String}</code>) aligned position-by-position with <code>ids</code>.</li><li><code>offsets</code>: <code>Union{Nothing, Vector{Tuple{Int,Int}}}</code> when <code>return_offsets=true</code>. Offsets are 1-based UTF-8 codeunit half-open spans <code>[start, stop)</code>. Sentinel <code>(0, 0)</code> means no source-text span.</li><li><code>attention_mask</code>: <code>Union{Nothing, Vector{Int}}</code> when <code>return_masks=true</code>. For a single unpadded <code>encode_result</code> call this is all ones.</li><li><code>token_type_ids</code>: <code>Union{Nothing, Vector{Int}}</code> when <code>return_masks=true</code>. Current default is zeros for single-sequence examples.</li><li><code>special_tokens_mask</code>: <code>Union{Nothing, Vector{Int}}</code> when <code>return_masks=true</code>. Marks special-token identity. A token can be special and still have a real span (for example <code>[UNK]</code> in WordPiece).</li><li><code>metadata</code>: named tuple with model and offsets metadata. <code>metadata.offsets_reference</code> is:<ul><li><code>:input_text</code> when <code>assume_normalized=true</code></li><li><code>:tokenizer_normalized_text</code> when <code>assume_normalized=false</code></li></ul></li></ul><h2 id="Example-1:-Inspect-encode_result-Output"><a class="docs-heading-anchor" href="#Example-1:-Inspect-encode_result-Output">Example 1: Inspect <code>encode_result</code> Output</a><a id="Example-1:-Inspect-encode_result-Output-1"></a><a class="docs-heading-anchor-permalink" href="#Example-1:-Inspect-encode_result-Output" title="Permalink"></a></h2><pre><code class="language-julia hljs">using KeemenaSubwords
+
+tokenizer = load_tokenizer(:core_wordpiece_en)
+clean_text = &quot;hello world&quot;
+tokenization_text = tokenization_view(tokenizer, clean_text)
+
+result = encode_result(
+    tokenizer,
+    tokenization_text;
+    assume_normalized = true,
+    add_special_tokens = true,
+    return_offsets = true,
+    return_masks = true,
+)
+
+result_default_reference = encode_result(
+    tokenizer,
+    clean_text;
+    assume_normalized = false,
+    add_special_tokens = true,
+    return_offsets = true,
+    return_masks = true,
+)
+
+@assert result.offsets !== nothing
+@assert result.attention_mask !== nothing
+@assert result.special_tokens_mask !== nothing
+
+rows = [
+    (
+        token_index = i,
+        token_id = result.ids[i],
+        token = result.tokens[i],
+        offset = result.offsets[i],
+        special = result.special_tokens_mask[i],
+        span_text = try_span_substring(tokenization_text, result.offsets[i]),
+    )
+    for i in eachindex(result.ids)
+]
+
+(
+    ids = result.ids,
+    tokens = result.tokens,
+    attention_mask_unique_values = unique(result.attention_mask),
+    offsets_reference = (
+        assume_normalized_true = result.metadata.offsets_reference,
+        assume_normalized_false = result_default_reference.metadata.offsets_reference,
+    ),
+    token_rows = rows,
+)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(ids = [3, 6, 7, 4], tokens = [&quot;[CLS]&quot;, &quot;hello&quot;, &quot;world&quot;, &quot;[SEP]&quot;], attention_mask_unique_values = [1], offsets_reference = (assume_normalized_true = :input_text, assume_normalized_false = :tokenizer_normalized_text), token_rows = [(token_index = 1, token_id = 3, token = &quot;[CLS]&quot;, offset = (0, 0), special = 1, span_text = &quot;&quot;), (token_index = 2, token_id = 6, token = &quot;hello&quot;, offset = (1, 6), special = 0, span_text = &quot;hello&quot;), (token_index = 3, token_id = 7, token = &quot;world&quot;, offset = (7, 12), special = 0, span_text = &quot;world&quot;), (token_index = 4, token_id = 4, token = &quot;[SEP]&quot;, offset = (0, 0), special = 1, span_text = &quot;&quot;)])</code></pre><p>What this shows:</p><ul><li>Inserted specials are typically sentinel spans <code>(0, 0)</code> with <code>special == 1</code>.</li><li><code>special_tokens_mask</code> marks token identity, not span participation.</li><li>In this example, <code>[UNK]</code> is special but still has a spanful offset from source text.</li></ul><h2 id="Example-2:-encode_batch_result-Returns-Per-Sequence-Outputs"><a class="docs-heading-anchor" href="#Example-2:-encode_batch_result-Returns-Per-Sequence-Outputs">Example 2: <code>encode_batch_result</code> Returns Per-Sequence Outputs</a><a id="Example-2:-encode_batch_result-Returns-Per-Sequence-Outputs-1"></a><a class="docs-heading-anchor-permalink" href="#Example-2:-encode_batch_result-Returns-Per-Sequence-Outputs" title="Permalink"></a></h2><pre><code class="language-julia hljs">clean_texts = [
+    &quot;hello world&quot;,
+    &quot;world hello world&quot;,
+    &quot;offset demo&quot;,
+]
+tokenization_texts = [tokenization_view(tokenizer, text) for text in clean_texts]
+
+batch_results = encode_batch_result(
+    tokenizer,
+    tokenization_texts;
+    assume_normalized = true,
+    add_special_tokens = true,
+    return_offsets = true,
+    return_masks = true,
+)
+
+batch_summary = [
+    (
+        sequence_index = i,
+        n_ids = length(batch_results[i].ids),
+        n_offsets = batch_results[i].offsets === nothing ? 0 : length(batch_results[i].offsets),
+        attention_mask = batch_results[i].attention_mask,
+    )
+    for i in eachindex(batch_results)
+]
+
+batch_summary</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">3-element Vector{@NamedTuple{sequence_index::Int64, n_ids::Int64, n_offsets::Int64, attention_mask::Vector{Int64}}}:
+ (sequence_index = 1, n_ids = 4, n_offsets = 4, attention_mask = [1, 1, 1, 1])
+ (sequence_index = 2, n_ids = 5, n_offsets = 5, attention_mask = [1, 1, 1, 1, 1])
+ (sequence_index = 3, n_ids = 4, n_offsets = 4, attention_mask = [1, 1, 1, 1])</code></pre><p><code>encode_batch_result</code> returns <code>Vector{TokenizationResult}</code>. Padding is not applied automatically. Each sequence keeps its own length.</p><h2 id="Example-3:-Padding-Collator-Recipe"><a class="docs-heading-anchor" href="#Example-3:-Padding-Collator-Recipe">Example 3: Padding Collator Recipe</a><a id="Example-3:-Padding-Collator-Recipe-1"></a><a class="docs-heading-anchor-permalink" href="#Example-3:-Padding-Collator-Recipe" title="Permalink"></a></h2><p>Policy in this example:</p><ul><li>output layout is <code>(seq_len, batch)</code> (column-major friendly in Julia),</li><li><code>ids</code> pad with <code>pad_id</code>,</li><li>padded <code>attention_mask</code> positions are <code>0</code>,</li><li>padded <code>special_tokens_mask</code> positions are marked as <code>1</code> (<code>mark_pad_as_special=true</code>).</li></ul><pre><code class="language-julia hljs">function pad_batch(
+    results::Vector{TokenizationResult};
+    pad_id::Int,
+    mark_pad_as_special::Bool = true,
+)
+    batch_size = length(results)
+    max_len = maximum(length(r.ids) for r in results)
+
+    ids = fill(pad_id, max_len, batch_size)
+    attention_mask = fill(0, max_len, batch_size)
+    special_tokens_mask = fill(mark_pad_as_special ? 1 : 0, max_len, batch_size)
+
+    for (col, r) in pairs(results)
+        seq_len = length(r.ids)
+        ids[1:seq_len, col] = r.ids
+        attention_mask[1:seq_len, col] .= 1
+        if r.special_tokens_mask === nothing
+            special_tokens_mask[1:seq_len, col] .= 0
+        else
+            special_tokens_mask[1:seq_len, col] = r.special_tokens_mask
+        end
+    end
+
+    return (
+        ids = ids,
+        attention_mask = attention_mask,
+        special_tokens_mask = special_tokens_mask,
+    )
+end
+
+collated = pad_batch(batch_results; pad_id = pad_id(tokenizer))
+
+(
+    ids_size = size(collated.ids),
+    attention_mask_size = size(collated.attention_mask),
+    special_tokens_mask_size = size(collated.special_tokens_mask),
+    ids = collated.ids,
+    attention_mask = collated.attention_mask,
+    special_tokens_mask = collated.special_tokens_mask,
+)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(ids_size = (5, 3), attention_mask_size = (5, 3), special_tokens_mask_size = (5, 3), ids = [3 3 3; 6 7 2; … ; 4 7 4; 1 4 1], attention_mask = [1 1 1; 1 1 1; … ; 1 1 1; 0 1 0], special_tokens_mask = [1 1 1; 0 0 1; … ; 1 0 1; 1 1 1])</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../concepts/">« Concepts</a><a class="docs-footer-nextpage" href="../integration/">Integration »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Monday 16 February 2026 18:40">Monday 16 February 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
