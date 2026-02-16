@@ -4,7 +4,9 @@ using KeemenaSubwords
 const FIXTURES_DIR = joinpath(@__DIR__, "fixtures")
 fixture(parts...) = joinpath(FIXTURES_DIR, parts...)
 const _DOWNLOAD_TESTS = get(ENV, "KEEMENA_TEST_DOWNLOADS", get(ENV, "KEEMENA_RUN_NETWORK_TESTS", "0")) == "1"
+const _EXTENDED_TESTS = get(ENV, "KEEMENA_EXTENDED_TESTS", "0") == "1"
 include("helpers/corpus.jl")
+include("helpers/synthetic_corpus.jl")
 
 function _assert_offset_contract(
     text::String,
@@ -555,6 +557,9 @@ end
     include("hf_json_roberta_processing_trim_offsets.jl")
     include("hf_json_export_roundtrip.jl")
     include("hf_json_bert_components.jl")
+    if _EXTENDED_TESTS
+        include("extended/runtests_extended.jl")
+    end
 
     @testset "Section 16 docs contracts and loader coherence" begin
         wp_path = fixture("wordpiece", "vocab.txt")

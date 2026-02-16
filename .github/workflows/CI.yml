@@ -22,6 +22,7 @@ jobs:
     timeout-minutes: 60
     env:
       KEEMENA_TEST_DOWNLOADS: "0"
+      KEEMENA_EXTENDED_TESTS: ${{ github.event_name == 'schedule' && matrix.version == '1.10' && '1' || '0' }}
       JULIA_PKG_SERVER: ""
       JULIA_PKG_SERVER_REGISTRY_PREFERENCE: conservative
     permissions:

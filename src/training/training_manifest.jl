@@ -559,10 +559,22 @@ function _resolve_manifest_file_paths(
     bundle_dir::String,
     files::Dict{String,String},
 )::Dict{String,String}
+    bundle_root = abspath(normpath(bundle_dir))
     resolved = Dict{String,String}()
 
-    for (key, relpath) in files
-        absolute = normpath(joinpath(bundle_dir, String(relpath)))
+    for (key, raw_relpath) in files
+        relpath = String(raw_relpath)
+        if isabspath(relpath)
+            throw(ArgumentError(
+                "Manifest file entry '$key' must be relative, got absolute path: $relpath",
+            ))
+        end
+
+        absolute = abspath(normpath(joinpath(bundle_root, relpath)))
+        _path_within_dir(absolute, bundle_root) || throw(ArgumentError(
+            "Manifest file entry '$key' escapes bundle directory: $relpath",
+        ))
+
         isfile(absolute) || throw(ArgumentError(
             "Manifest file entry '$key' points to missing file: $absolute",
         ))
@@ -570,6 +582,16 @@ function _resolve_manifest_file_paths(
     end
 
     return resolved
+end
+
+function _path_within_dir(path::String, root::String)::Bool
+    relative = relpath(path, root)
+    isabspath(relative) && return false
+    return !(
+        relative == ".." ||
+        startswith(relative, "../") ||
+        startswith(relative, "..\\")
+    )
 end
 
 function _manifest_primary_file_key(load_format::Symbol)::String
