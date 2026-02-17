@@ -35,12 +35,22 @@ Pick one:
 - **You get:** token ids (`Int` numbers), token pieces (readable chunks), and decoded text as a round-trip sanity check.
 - **Use it for:** quick model-input prep, inspection, and early alignment checks.
 
+Super simple:
+
 ```@example quick_handler_quick_tokenize
 using KeemenaSubwords
 (let out = quick_tokenize(:core_bpe_en, "hello world"); (pieces=out.token_pieces, ids=out.token_ids, decoded=out.decoded_text) end)
 ```
 
-It also returns offsets and masks by default. You can ignore them unless you are doing alignment or training.
+Peek inside:
+
+```@example quick_handler_quick_tokenize_peek
+using KeemenaSubwords
+(let out = quick_tokenize(:core_bpe_en, "hello world hello"); (offsets_reference=out.metadata.offsets_reference, offsets=out.offsets) end)
+```
+
+Returns: `token_pieces`, `token_ids`, `decoded_text`, `tokenization_text`, `offsets`, `attention_mask`, `token_type_ids`, `special_tokens_mask`, and `metadata`.
+It returns offsets and masks by default, and you can ignore them unless you are doing alignment or training.
 
 Common knobs:
 - `add_special_tokens`: include start and end tokens used by many models.
@@ -56,12 +66,22 @@ Go deeper: [P1](#p1-load-a-shipped-tokenizer-and-encode-or-decode), [Concepts](c
 - **You get:** one structured result per string, plus per-string sequence lengths.
 - **Use it for:** batched preprocessing before you decide how to pad or collate.
 
+Super simple:
+
 ```@example quick_handler_quick_encode_batch
 using KeemenaSubwords
 quick_encode_batch(:core_wordpiece_en, ["hello world", "hello"]).sequence_lengths
 ```
 
-Full structured results live at `.results`.
+Peek inside:
+
+```@example quick_handler_quick_encode_batch_peek
+using KeemenaSubwords
+(let out = quick_encode_batch(:core_wordpiece_en, ["hello world hello", "hello world"]); (tokens=first(out.results[1].tokens, 6), ids=first(out.results[1].ids, 6)) end)
+```
+
+Returns: `tokenization_texts`, `results`, and `sequence_lengths`.
+Full structured per-string outputs live at `.results`.
 
 Common knobs:
 - `add_special_tokens`: include model-specific start and end tokens.
@@ -77,11 +97,21 @@ Go deeper: [P5](#p5-batch-encode-multiple-sequences-no-padding-yet), [Structured
 - **You get:** padded `ids`, `attention_mask`, and `labels` matrices shaped `(seq_len, batch)`.
 - **Use it for:** next-token training pipelines that need dense tensors.
 
+Super simple:
+
 ```@example quick_handler_quick_causal_lm_batch
 using KeemenaSubwords
 (let out = quick_causal_lm_batch(:core_wordpiece_en, ["hello world", "hello"]); (ids_size=size(out.ids), labels_size=size(out.labels), pad_token_id=out.pad_token_id) end)
 ```
 
+Peek inside:
+
+```@example quick_handler_quick_causal_lm_batch_peek
+using KeemenaSubwords
+(let out = quick_causal_lm_batch(:core_wordpiece_en, ["hello world hello", "hello world"]); (ids_col_1=out.ids[:, 1], labels_col_1=out.labels[:, 1], ignore_index=out.ignore_index) end)
+```
+
+Returns: `ids`, `attention_mask`, `labels`, `token_type_ids`, `special_tokens_mask`, `tokenization_texts`, `sequence_lengths`, `pad_token_id`, `ignore_index`, and `zero_based`.
 `labels` are the next-token targets. Padding and the last real token are set to `ignore_index`.
 
 Common knobs:
@@ -98,13 +128,22 @@ Go deeper: [P6](#p6-padding-plus-labels-for-training-pointer-recipe), [Structure
 - **You get:** saved bundle files and a reloadable tokenizer with sanity encode/decode outputs.
 - **Use it for:** local tokenizer training and reproducible reload for experiments.
 
+Super simple:
+
 ```@example quick_handler_quick_train_bundle
 using KeemenaSubwords
 quick_train_bundle(["hello world", "hello tokenizer", "world tokenizer"]; vocab_size=48, min_frequency=1).bundle_files
 ```
 
+Peek inside:
+
+```@example quick_handler_quick_train_bundle_peek
+using KeemenaSubwords
+(let out = quick_train_bundle(["alpha beta", "beta gamma", "alpha gamma"]; vocab_size=40, min_frequency=1); (sanity_ids=out.sanity_encoded_ids, sanity_decoded=out.sanity_decoded_text) end)
+```
+
+Returns: `bundle_directory`, `bundle_files`, `tokenizer`, `training_summary`, `sanity_encoded_ids`, and `sanity_decoded_text`.
 This writes a small tokenizer bundle to disk so you can reload it later without remembering training settings.
-The returned object also includes `tokenizer`, `training_summary`, `sanity_encoded_ids`, and `sanity_decoded_text`.
 
 Common knobs:
 - `vocab_size`: target vocabulary size.
