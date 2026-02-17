@@ -201,26 +201,15 @@ If you care about strict normalization and span alignment workflows, the docs de
 - Built-in models come from a registry: some are shipped, some are downloadable artifacts, and some are gated and require an explicit `install_model!`.
 - For repeated use, prefer caching helpers like `get_tokenizer_cached(...)` and clear when needed via `clear_tokenizer_cache!()`.
 
-## Featured models
+## Featured Models
 
-KeemenaSubwords includes a registry of ready-to-use model keys. Many are downloadable automatically (as Julia artifacts), and some are gated by upstream licensing (installed explicitly). You can always discover the full inventory with `available_models()`.
+_Generated from registry metadata via `tools/sync_readme_models.jl`._
 
-A small sample of commonly useful keys:
-
-- tiktoken: `:tiktoken_cl100k_base`, `:tiktoken_o200k_base`
-- bpe_gpt2: `:openai_gpt2_bpe`, `:phi2_bpe`, `:roberta_base_bpe`
-- sentencepiece_model: `:mistral_v3_sentencepiece`, `:xlm_roberta_base_sentencepiece_bpe`
-- hf_tokenizer_json: `:qwen2_5_bpe`
-- wordpiece_vocab: `:bert_base_multilingual_cased_wordpiece`, `:bert_base_uncased_wordpiece`
-
-Example:
-
-```julia
-using KeemenaSubwords
-
-prefetch_models([:tiktoken_o200k_base])
-tokenizer = load_tokenizer(:tiktoken_o200k_base)
-```
+- **`tiktoken`**: `:tiktoken_cl100k_base`, `:tiktoken_o200k_base`
+- **`bpe_gpt2`**: `:openai_gpt2_bpe`, `:phi2_bpe`, `:roberta_base_bpe`
+- **`sentencepiece_model`**: `:mistral_v3_sentencepiece`, `:xlm_roberta_base_sentencepiece_bpe`
+- **`hf_tokenizer_json`**: `:qwen2_5_bpe`
+- **`wordpiece_vocab`**: `:bert_base_multilingual_cased_wordpiece`, `:bert_base_uncased_wordpiece`
 
 ## Documentation
 
