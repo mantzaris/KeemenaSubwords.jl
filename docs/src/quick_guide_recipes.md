@@ -39,33 +39,89 @@ Use this 3-step mental model:
 
 ## Quick Handlers (1-2 line workflows)
 
-Use these helpers when you want outputs fast, then drop to the step-by-step recipes if you need customization:
+Pick the one matching your goal. You do not need all of these.
 
-- `quick_tokenize(...)` for one text -> pieces, ids, decoded text, offsets, and masks.
-- `quick_encode_batch(...)` for many texts -> `Vector{TokenizationResult}` with optional offsets and masks.
-- `quick_causal_lm_batch(...)` for many texts -> padded `ids`, `attention_mask`, and causal `labels`.
-- `quick_train_bundle(...)` for one-call training round-trip -> train, save bundle, reload, and sanity encode/decode.
+- One text -> `quick_tokenize`
+- Many texts, no padding -> `quick_encode_batch`
+- Many texts, padded + causal labels -> `quick_causal_lm_batch`
+- Train a tokenizer bundle locally -> `quick_train_bundle`
 
-```@example quick_guide_helpers
+### quick_tokenize
+
+When to use: you have one text and want pieces, ids, decoded text, and optional alignment metadata in one call.
+
+```@example quick_handler_quick_tokenize
 using KeemenaSubwords
-
-single = quick_tokenize(:core_bpe_en, "hello world")
-batch = quick_encode_batch(:core_wordpiece_en, ["hello world", "hello"])
-causal = quick_causal_lm_batch(:core_wordpiece_en, ["hello world", "hello"])
-training = quick_train_bundle(
-    :wordpiece,
-    ["hello world", "hello tokenizer", "world tokenizer"];
-    vocab_size=48,
-    min_frequency=1,
-)
-
-(
-    single_keys=keys(single),
-    batch_lengths=batch.sequence_lengths,
-    causal_shapes=(ids=size(causal.ids), labels=size(causal.labels)),
-    training_files=training.bundle_files,
-)
+quick_tokenize(:core_bpe_en, "hello world")
 ```
+
+What you get back:
+- `token_ids`
+- `token_pieces`
+- `decoded_text`
+
+Common options:
+- `add_special_tokens=true` (default)
+- `return_offsets=true` and `return_masks=true` are enabled by default and safe to ignore when not needed
+- `apply_tokenization_view=true` (default)
+
+### quick_encode_batch
+
+When to use: you have many texts and want per-sequence structured outputs without padding yet.
+
+```@example quick_handler_quick_encode_batch
+using KeemenaSubwords
+quick_encode_batch(:core_wordpiece_en, ["hello world", "hello"]).sequence_lengths
+```
+
+What you get back:
+- `sequence_lengths` preview in this snippet
+- full per-sequence structured outputs at `.results`
+
+Common options:
+- `add_special_tokens=true` (default)
+- `return_offsets=true` and `return_masks=true` (both default to true)
+- `apply_tokenization_view=true` (default)
+
+### quick_causal_lm_batch
+
+When to use: you want training-ready padded tensors and next-token labels in one step.
+
+```@example quick_handler_quick_causal_lm_batch
+using KeemenaSubwords
+(let out = quick_causal_lm_batch(:core_wordpiece_en, ["hello world", "hello"])
+    (ids_size=size(out.ids), labels_size=size(out.labels), pad_token_id=out.pad_token_id)
+end)
+```
+
+What you get back:
+- padded `(seq_len, batch)` `ids`
+- padded `(seq_len, batch)` `attention_mask`
+- shifted `(seq_len, batch)` causal `labels`
+
+Common options:
+- `ignore_index=-100` (default)
+- `zero_based=false` (set true only when external tooling expects 0-based labels)
+- `pad_to_multiple_of=nothing` (set to align sequence lengths for kernels)
+
+### quick_train_bundle
+
+When to use: you want a local one-call training round-trip (train, save bundle, reload, sanity encode/decode).
+
+```@example quick_handler_quick_train_bundle
+using KeemenaSubwords
+quick_train_bundle(:wordpiece, ["hello world", "hello tokenizer", "world tokenizer"]; vocab_size=48, min_frequency=1).bundle_files
+```
+
+What you get back:
+- `bundle_files` preview in this snippet
+- returned object also includes `tokenizer`, `training_summary`, `sanity_encoded_ids`, and `sanity_decoded_text`
+
+Common options:
+- `vocab_size` and `min_frequency` for training
+- `quick_train_bundle(corpus; ...)` defaults to `:wordpiece`
+- `sanity_text="hello world"` (default)
+- `overwrite=true` and `export_format=:auto` (defaults)
 
 ## Pretrained tokenizer recipes (common)
 

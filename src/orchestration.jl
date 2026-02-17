@@ -438,6 +438,9 @@ Supported trainer symbols:
 - `:hf_roberta_bytebpe`
 - `:hf_gpt2_bytebpe`
 
+Convenience overload:
+- `quick_train_bundle(corpus; kwargs...)` defaults to `trainer=:wordpiece`.
+
 Keyword arguments:
 - `bundle_directory::Union{Nothing,AbstractString}=nothing`
 - `overwrite::Bool=true`
@@ -496,6 +499,13 @@ function quick_train_bundle(
         sanity_encoded_ids=sanity_encoded_ids,
         sanity_decoded_text=sanity_decoded_text,
     )
+end
+
+function quick_train_bundle(
+    corpus::AbstractVector{<:AbstractString};
+    kwargs...,
+)::NamedTuple
+    return quick_train_bundle(:wordpiece, corpus; kwargs...)
 end
 
 function _resolve_quick_tokenizer(

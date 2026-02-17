@@ -131,5 +131,17 @@
         reload_decoded = decode(output.tokenizer, reload_ids)
         @test reload_ids == output.sanity_encoded_ids
         @test reload_decoded == output.sanity_decoded_text
+
+        default_output = quick_train_bundle(
+            corpus;
+            vocab_size=48,
+            min_frequency=1,
+            model_name="quick_wordpiece_default_overload_test",
+            sanity_text="hello world",
+            overwrite=true,
+        )
+        @test default_output.training_summary.trainer == :wordpiece
+        @test !isempty(default_output.bundle_files)
+        @test !isempty(default_output.sanity_encoded_ids)
     end
 end
