@@ -15,6 +15,105 @@ Recommended pipeline contract:
 `tokenization_text = tokenization_view(tokenizer, clean_text)`, then
 `encode_result(tokenizer, tokenization_text; assume_normalized=true, return_offsets=true, return_masks=true, ...)`.
 
+## Quick Handlers (1-2 line workflows)
+
+!!! tip "In a hurry? Start here"
+    Pick one quick handler and run it. You do not need all of them.
+    Each handler returns extra outputs on purpose, so you can ignore fields you do not need now.
+    If you want to customize behavior, the detailed recipes below walk through each step.
+
+Pick one:
+
+- One string -> token ids (numbers) and token pieces (readable chunks) with `quick_tokenize`
+- Many strings -> per-string results (no padding) with `quick_encode_batch`
+- Many strings -> padded training tensors and causal labels with `quick_causal_lm_batch`
+- Train -> save bundle -> reload -> sanity check with `quick_train_bundle`
+
+### One string to tokens with `quick_tokenize`
+
+- **You have:** one input `String`, for example `"hello world"`.
+- **You get:** token ids (`Int` numbers), token pieces (readable chunks), and decoded text as a round-trip sanity check.
+- **Use it for:** quick model-input prep, inspection, and early alignment checks.
+
+```@example quick_handler_quick_tokenize
+using KeemenaSubwords
+(let out = quick_tokenize(:core_bpe_en, "hello world"); (pieces=out.token_pieces, ids=out.token_ids, decoded=out.decoded_text) end)
+```
+
+It also returns offsets and masks by default. You can ignore them unless you are doing alignment or training.
+
+Common knobs:
+- `add_special_tokens`: include start and end tokens used by many models.
+- `return_offsets`: include where each token came from in the string.
+- `return_masks`: include 0/1 masks that are useful for training.
+- `apply_tokenization_view`: run tokenizer-specific normalization view before encoding.
+
+Go deeper: [P1](#p1-load-a-shipped-tokenizer-and-encode-or-decode), [Concepts](concepts.md).
+
+### Many strings to per-sequence results with `quick_encode_batch`
+
+- **You have:** `Vector{String}`, for example `["hello world", "hello"]`.
+- **You get:** one structured result per string, plus per-string sequence lengths.
+- **Use it for:** batched preprocessing before you decide how to pad or collate.
+
+```@example quick_handler_quick_encode_batch
+using KeemenaSubwords
+quick_encode_batch(:core_wordpiece_en, ["hello world", "hello"]).sequence_lengths
+```
+
+Full structured results live at `.results`.
+
+Common knobs:
+- `add_special_tokens`: include model-specific start and end tokens.
+- `return_offsets`: keep alignment spans for each token.
+- `return_masks`: keep 0/1 masks for each sequence.
+- `apply_tokenization_view`: normalize each input into tokenizer coordinates first.
+
+Go deeper: [P5](#p5-batch-encode-multiple-sequences-no-padding-yet), [Structured Outputs and Batching](structured_outputs_and_batching.md).
+
+### Many strings to training tensors with `quick_causal_lm_batch`
+
+- **You have:** `Vector{String}` for a training batch.
+- **You get:** padded `ids`, `attention_mask`, and `labels` matrices shaped `(seq_len, batch)`.
+- **Use it for:** next-token training pipelines that need dense tensors.
+
+```@example quick_handler_quick_causal_lm_batch
+using KeemenaSubwords
+(let out = quick_causal_lm_batch(:core_wordpiece_en, ["hello world", "hello"]); (ids_size=size(out.ids), labels_size=size(out.labels), pad_token_id=out.pad_token_id) end)
+```
+
+`labels` are the next-token targets. Padding and the last real token are set to `ignore_index`.
+
+Common knobs:
+- `ignore_index`: value used where loss should be ignored.
+- `zero_based`: convert labels to 0-based ids for external consumers.
+- `pad_to_multiple_of`: round sequence length up for kernel-friendly shapes.
+- `add_special_tokens`: include model boundary tokens before collation.
+
+Go deeper: [P6](#p6-padding-plus-labels-for-training-pointer-recipe), [Structured Outputs and Batching](structured_outputs_and_batching.md).
+
+### Train a tokenizer bundle with `quick_train_bundle`
+
+- **You have:** a small local corpus (`Vector{String}`).
+- **You get:** saved bundle files and a reloadable tokenizer with sanity encode/decode outputs.
+- **Use it for:** local tokenizer training and reproducible reload for experiments.
+
+```@example quick_handler_quick_train_bundle
+using KeemenaSubwords
+quick_train_bundle(["hello world", "hello tokenizer", "world tokenizer"]; vocab_size=48, min_frequency=1).bundle_files
+```
+
+This writes a small tokenizer bundle to disk so you can reload it later without remembering training settings.
+The returned object also includes `tokenizer`, `training_summary`, `sanity_encoded_ids`, and `sanity_decoded_text`.
+
+Common knobs:
+- `vocab_size`: target vocabulary size.
+- `min_frequency`: minimum token frequency to keep.
+- `sanity_text`: string used for encode/decode sanity check.
+- `overwrite`: allow reusing an existing bundle directory.
+
+Go deeper: [Training (experimental)](training.md), [Formats](formats.md).
+
 ## How to use this page
 
 Use this 3-step mental model:
@@ -36,92 +135,6 @@ Use this 3-step mental model:
 - I want to load local files -> [P8](#p8-load-from-a-local-path-auto-detect-plus-override)
 - I need a gated tokenizer -> [P9](#p9-install-and-load-a-gated-model)
 - I want to train a tokenizer -> [T1](#t1-train-a-tiny-wordpiece-tokenizer-save-reload-and-encode)
-
-## Quick Handlers (1-2 line workflows)
-
-Pick the one matching your goal. You do not need all of these.
-
-- One text -> `quick_tokenize`
-- Many texts, no padding -> `quick_encode_batch`
-- Many texts, padded + causal labels -> `quick_causal_lm_batch`
-- Train a tokenizer bundle locally -> `quick_train_bundle`
-
-### quick_tokenize
-
-When to use: you have one text and want pieces, ids, decoded text, and optional alignment metadata in one call.
-
-```@example quick_handler_quick_tokenize
-using KeemenaSubwords
-quick_tokenize(:core_bpe_en, "hello world")
-```
-
-What you get back:
-- `token_ids`
-- `token_pieces`
-- `decoded_text`
-
-Common options:
-- `add_special_tokens=true` (default)
-- `return_offsets=true` and `return_masks=true` are enabled by default and safe to ignore when not needed
-- `apply_tokenization_view=true` (default)
-
-### quick_encode_batch
-
-When to use: you have many texts and want per-sequence structured outputs without padding yet.
-
-```@example quick_handler_quick_encode_batch
-using KeemenaSubwords
-quick_encode_batch(:core_wordpiece_en, ["hello world", "hello"]).sequence_lengths
-```
-
-What you get back:
-- `sequence_lengths` preview in this snippet
-- full per-sequence structured outputs at `.results`
-
-Common options:
-- `add_special_tokens=true` (default)
-- `return_offsets=true` and `return_masks=true` (both default to true)
-- `apply_tokenization_view=true` (default)
-
-### quick_causal_lm_batch
-
-When to use: you want training-ready padded tensors and next-token labels in one step.
-
-```@example quick_handler_quick_causal_lm_batch
-using KeemenaSubwords
-(let out = quick_causal_lm_batch(:core_wordpiece_en, ["hello world", "hello"])
-    (ids_size=size(out.ids), labels_size=size(out.labels), pad_token_id=out.pad_token_id)
-end)
-```
-
-What you get back:
-- padded `(seq_len, batch)` `ids`
-- padded `(seq_len, batch)` `attention_mask`
-- shifted `(seq_len, batch)` causal `labels`
-
-Common options:
-- `ignore_index=-100` (default)
-- `zero_based=false` (set true only when external tooling expects 0-based labels)
-- `pad_to_multiple_of=nothing` (set to align sequence lengths for kernels)
-
-### quick_train_bundle
-
-When to use: you want a local one-call training round-trip (train, save bundle, reload, sanity encode/decode).
-
-```@example quick_handler_quick_train_bundle
-using KeemenaSubwords
-quick_train_bundle(:wordpiece, ["hello world", "hello tokenizer", "world tokenizer"]; vocab_size=48, min_frequency=1).bundle_files
-```
-
-What you get back:
-- `bundle_files` preview in this snippet
-- returned object also includes `tokenizer`, `training_summary`, `sanity_encoded_ids`, and `sanity_decoded_text`
-
-Common options:
-- `vocab_size` and `min_frequency` for training
-- `quick_train_bundle(corpus; ...)` defaults to `:wordpiece`
-- `sanity_text="hello world"` (default)
-- `overwrite=true` and `export_format=:auto` (defaults)
 
 ## Pretrained tokenizer recipes (common)
 

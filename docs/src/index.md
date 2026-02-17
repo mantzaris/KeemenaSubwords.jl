@@ -57,6 +57,7 @@ install_model!(:llama3_8b_tokenizer; token=ENV["HF_TOKEN"])
 ## Quick Guide Recipes
 
 - [Quick Guide Recipes: choose your path](quick_guide_recipes.md)
+- [Quick handlers (1-2 line workflows)](quick_guide_recipes.md#quick-handlers-1-2-line-workflows)
 - [Pretrained tokenizer recipes](quick_guide_recipes.md#pretrained-tokenizer-recipes-common)
 - [Training recipes (experimental)](quick_guide_recipes.md#training-recipes-experimental)
 - [Structured outputs and batching (training-ready tensors)](structured_outputs_and_batching.md)
